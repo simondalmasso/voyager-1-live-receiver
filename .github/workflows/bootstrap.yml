@@ -26,7 +26,18 @@ jobs:
           cat .bootstrap/chunk.* | base64 -d > /tmp/voyager-project.tar.gz
           echo '4f3b930f458dd6ade62110d779fe4be99b38f13aba6909e181ea8804aee29d82  /tmp/voyager-project.tar.gz' | sha256sum -c -
           tar -xzf /tmp/voyager-project.tar.gz
-          rm -rf .bootstrap .github/workflows/bootstrap.yml
+
+          # GitHub Actions' repository token may update normal source files but
+          # cannot create additional workflow files. Preserve this bootstrap
+          # workflow and install the final CI workflows through the GitHub
+          # connector after the product commit lands.
+          rm -f \
+            .github/workflows/ci.yml \
+            .github/workflows/data-verify.yml \
+            .github/workflows/listener-ci.yml \
+            .github/workflows/security.yml
+          git restore --source=HEAD -- .github/workflows/bootstrap.yml
+          rm -rf .bootstrap
 
       - name: Commit canonical product
         shell: bash
