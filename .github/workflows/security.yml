@@ -1,0 +1,44 @@
+name: Security
+on:
+  push:
+    branches: [main, feat/aud-001-complete-product]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  secret-and-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret pattern scan
+        run: |
+          set -e
+          ! grep -RInE --exclude-dir=.git --exclude='*.md' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
+      - name: No remote deploy invariant
+        run: |
+          set -e
+          if grep -RInE 'wrangler +deploy' .github/workflows | grep -v -- '--dry-run'; then
+            echo 'Remote deploy command detected in workflow.' >&2
+            exit 1
+          fi
+      - name: License inventory
+        run: node scripts/inventory.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: security-evidence
+          path: artifacts/source-license-inventory.json
+  codeql:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        language: [javascript-typescript, python]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/analyze@v3
