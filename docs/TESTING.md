@@ -1,0 +1,3 @@
+# Testing
+
+Node built-in tests cover constants, units, vector calculations, truth contracts, Horizons parsing, hostile DSN XML, input validation, security headers, sensitive claims, and the no-deploy invariant. Python unittest covers deterministic tone recovery, no-signal rejection, Doppler sign, and chunked SigMF. Playwright covers desktop/mobile/WebKit, mode switching, deep-link sanitation, honest synthetic labels, keyboard navigation, screenshots/traces on failure, and axe. CI also builds, reports bundle size, verifies data JSON, inventories licenses, scans secrets, and runs Wrangler dry-run.

@@ -1,0 +1,1 @@
+import {readFile} from 'node:fs/promises';import {createHash} from 'node:crypto';for(const p of ['data/sources.json','data/trajectory-v1.json','data/mission-snapshot.json','data/fixtures/recorded-authentic-manifest.json']){const b=await readFile(p);JSON.parse(b);console.log(`${p} ${createHash('sha256').update(b).digest('hex')}`)}

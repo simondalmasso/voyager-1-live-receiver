@@ -1,0 +1,5 @@
+{
+  "station": {"id": "dwingeloo-example", "name": "Example Telescope", "latitudeDeg": 52.812, "longitudeDeg": 6.396, "elevationM": 25},
+  "receiver": {"source": "sigmf", "centerFrequencyHz": 8420430000, "sampleRateHz": 1000000, "polarization": "unknown"},
+  "analysis": {"fftSize": 1048576, "integrationSeconds": 600, "searchHalfWidthHz": 250}
+}

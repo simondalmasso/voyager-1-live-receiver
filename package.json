@@ -1,0 +1,25 @@
+{
+  "name": "voyager-1-live-receiver",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Receive-only Voyager 1 signal and mission visualization webapp",
+  "engines": { "node": ">=24 <27", "npm": ">=11" },
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/serve.mjs --dist",
+    "test": "node --test tests/*.test.mjs",
+    "test:contracts": "node --test tests/contracts.test.mjs",
+    "test:worker": "node --test tests/worker.test.mjs",
+    "test:e2e": "playwright test",
+    "lint": "node scripts/lint.mjs",
+    "format:check": "node scripts/format-check.mjs",
+    "verify:data": "node scripts/verify-data.mjs",
+    "inventory": "node scripts/inventory.mjs",
+    "bundle:report": "node scripts/bundle-report.mjs",
+    "deploy:dry-run": "wrangler deploy --dry-run --outdir .wrangler-dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "license": "MIT"
+}

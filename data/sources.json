@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-08-05T00:00:00Z",
+  "sources": [
+    {"id":"jpl-horizons-vectors","authority":"JPL","url":"https://ssd.jpl.nasa.gov/api/horizons.api","purpose":"Current geometric vectors","access":"Worker fetch","cacheSeconds":600,"fallback":"embedded stale seed","parser":"worker/horizons.js"},
+    {"id":"nasa-dsn-now-public-feed","authority":"NASA/JPL","url":"https://eyes.nasa.gov/dsn/data/dsn.xml","purpose":"Opportunistic DSN status","access":"Worker fetch","cacheSeconds":5,"fallback":"UNAVAILABLE","parser":"worker/dsn.js"},
+    {"id":"nasa-voyager-science","authority":"NASA","url":"https://science.nasa.gov/mission/voyager/","purpose":"Mission narrative and status","access":"versioned snapshot","cacheSeconds":86400,"fallback":"UNKNOWN"},
+    {"id":"naif-voyager-kernels","authority":"NAIF/JPL","url":"https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/","purpose":"Reproducible trajectory generation","access":"operator script; not bundled","fallback":"visual milestone path"},
+    {"id":"pds-voyager1-pws","authority":"NASA PDS","url":"https://pds.nasa.gov/ds-view/pds/viewBundle.jsp?identifier=urn:nasa:pds:voyager1.pws.sa&version=2.0","purpose":"Historical calibrated PWS science","access":"catalog adapter","fallback":"UNAVAILABLE"},
+    {"id":"camras-voyager-reception","authority":"CAMRAS","url":"https://www.camras.nl/en/blog/2024/dwingeloo-telescope-receives-signals-from-voyager-1/","purpose":"Real reception setup reference","access":"documentation","fallback":"none"},
+    {"id":"seti-ata-voyager-detection","authority":"SETI Institute","url":"https://www.seti.org/news/detecting-voyager-1-with-the-ata/","purpose":"Carrier frequency and detection reference","access":"documentation","fallback":"none"}
+  ]
+}
