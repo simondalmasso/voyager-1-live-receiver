@@ -1,0 +1,39 @@
+name: Bootstrap AUD-001
+
+on:
+  push:
+    branches:
+      - feat/aud-001-complete-product
+    paths:
+      - '.bootstrap/**'
+      - '.github/workflows/bootstrap.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout canonical branch
+        uses: actions/checkout@v4
+
+      - name: Verify and expand product tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .bootstrap/chunk.* | base64 -d > /tmp/voyager-project.tar.gz
+          echo '4f3b930f458dd6ade62110d779fe4be99b38f13aba6909e181ea8804aee29d82  /tmp/voyager-project.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/voyager-project.tar.gz
+          rm -rf .bootstrap .github/workflows/bootstrap.yml
+
+      - name: Commit canonical product
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: implement AUD-001 complete pre-deploy product'
+          git push
