@@ -12,6 +12,7 @@ env:
   AUD_COMMENT_ID: 5217561657
   BASELINE_SHA: 237a920943175758604ddf1001ae950314ef4d3f
   BASELINE_PRODUCTION_SHA: 6b6fccc1952bc4f77640a50c88feb105d5e26f97
+  BASELINE_CLOUDFLARE_VERSION: b4b8e490-3b4f-4f05-898d-b2ace00842bf
   PRODUCTION_URL: https://voyager-1-live-receiver.simondalmasso44.workers.dev
   USD_BUDGET: "0"
   PAYMENT_DATA: "NO"
@@ -39,6 +40,7 @@ jobs:
           test "$AUD_COMMENT_ID" = '5217561657'
           test "$BASELINE_SHA" = '237a920943175758604ddf1001ae950314ef4d3f'
           test "$BASELINE_PRODUCTION_SHA" = '6b6fccc1952bc4f77640a50c88feb105d5e26f97'
+          test "$BASELINE_CLOUDFLARE_VERSION" = 'b4b8e490-3b4f-4f05-898d-b2ace00842bf'
           test "$USD_BUDGET" = '0' && test "$PAYMENT_DATA" = 'NO' && test "$RF_TX" = 'NO' && test "$MAIN_MERGE" = 'NO'
           test -n "${CLOUDFLARE_API_TOKEN:-}" && test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
           jq -e '.action == "EXECUTE_ORDER_011_END_TO_END" and .audCommentId == 5217561657 and .baselineSha == "237a920943175758604ddf1001ae950314ef4d3f" and .baselineProductionSha == "6b6fccc1952bc4f77640a50c88feb105d5e26f97" and .usdBudget == 0 and .paymentData == "NO" and .rfTx == "NO" and .mainMerge == "NO"' ops/order011-deploy-request.json >/dev/null
@@ -51,9 +53,7 @@ jobs:
           mkdir -p artifacts/order011/predeploy
           npx --yes wrangler@4.114.0 whoami > artifacts/order011/predeploy/whoami.txt
           npx --yes wrangler@4.114.0 deployments list --json > artifacts/order011/predeploy/cloudflare-deployments.json
-          baseline_version="$(jq -r '.[0].versions[0].version_id // .[0].versions[0].id // .[0].version_id // empty' artifacts/order011/predeploy/cloudflare-deployments.json)"
-          test -n "$baseline_version"
-          echo "$baseline_version" > artifacts/order011/predeploy/rollback-version-id.txt
+          echo "$BASELINE_CLOUDFLARE_VERSION" > artifacts/order011/predeploy/rollback-version-id.txt
           streak=0
           for i in $(seq 1 60); do
             if curl --fail --silent --show-error --connect-timeout 5 --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v1/health?pre=$i-$RANDOM" -o artifacts/order011/predeploy/health.json && jq -e --arg baseline "$BASELINE_PRODUCTION_SHA" '.status=="ok" and .buildSha==$baseline' artifacts/order011/predeploy/health.json >/dev/null; then streak=$((streak+1)); else streak=0; fi
@@ -61,7 +61,7 @@ jobs:
             sleep 2
           done
           test "$streak" -ge 3
-          echo "ROLLBACK_TARGET=$baseline_version"
+          echo "ROLLBACK_TARGET=$BASELINE_CLOUDFLARE_VERSION"
           echo 'BASELINE_EDGE_CONVERGENCE=PASS'
       - name: Install exact dependencies
         run: |
@@ -180,7 +180,7 @@ jobs:
               await page.waitForTimeout(2000);
             }
             if(!ready)throw new Error(`ORDER011 shell not converged ${width}x${height}`);
-            await page.locator('#freshness').waitFor();
+            await page.waitForFunction(()=>{const el=document.querySelector('#freshness');return el&&!/Loading source state/i.test(el.textContent||'')},{timeout:30000});
             if((await page.locator('#primary-controls').isVisible())||(await page.locator('#lab-drawer').isVisible())||(await page.locator('#signal-panel').isVisible()))throw new Error(`initial disclosure open ${width}x${height}`);
             const ratio=await page.evaluate(()=>{const n=[...document.querySelectorAll('.micro-brand,.micro-truth,.micro-controls button')].filter(x=>getComputedStyle(x).display!=='none');return n.reduce((s,x)=>{const r=x.getBoundingClientRect();return s+r.width*r.height},0)/(innerWidth*innerHeight)});if(!(ratio<.1))throw new Error(`persistent UI ratio ${ratio}`);
             const canvas=page.locator('#space-canvas');if(await canvas.isVisible()){await page.waitForFunction(()=>document.querySelector('#space-canvas')?.dataset.fitValid==='true',{timeout:15000})}else if(!(await page.locator('#webgl-fallback').isVisible()))throw new Error('no scene or fallback');
@@ -194,9 +194,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          baseline_version="$(cat artifacts/order011/predeploy/rollback-version-id.txt)"
-          npx --yes wrangler@4.114.0 rollback "$baseline_version" --message "ORDER011 automatic rollback after failed production verification"
-          echo "ROLLBACK_EXECUTED=$baseline_version"
+          npx --yes wrangler@4.114.0 rollback "$BASELINE_CLOUDFLARE_VERSION" --message "ORDER011 automatic rollback after failed production verification"
+          echo "ROLLBACK_EXECUTED=$BASELINE_CLOUDFLARE_VERSION"
       - name: Create GitHub production deployment record
         if: success()
         env: { GH_TOKEN: "${{ github.token }}" }
