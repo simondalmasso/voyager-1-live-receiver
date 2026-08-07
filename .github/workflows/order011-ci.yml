@@ -43,11 +43,15 @@ jobs:
       - run: python -m pip install -e ./listener-agent
       - run: python -m unittest discover -s listener-agent/tests -v
       - run: voyager-listener doctor
+      - name: Verify retained SPICE/Horizons geometry evidence
+        run: voyager-science verify-geometry
       - run: voyager-science evidence-fixture --output artifacts/order011-evidence.zip --verify
       - uses: actions/upload-artifact@v4
         with:
           name: order011-listener-${{ github.sha }}
-          path: artifacts/order011-evidence.zip
+          path: |
+            artifacts/order011-evidence.zip
+            artifacts/science-evidence/spice-horizons-crosscheck.json
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
