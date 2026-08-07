@@ -1,0 +1,23 @@
+name: ORDER010 Model Axis Inspect
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['.github/workflows/order010-model-inspect.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect GLB scene graph only
+        run: |
+          python - <<'PY'
+          import json,struct,pathlib
+          b=pathlib.Path('assets/voyager-probe-a.glb').read_bytes();n,t=struct.unpack_from('<II',b,12);d=json.loads(b[20:20+n].decode().rstrip('\x00 '))
+          print('SCENES',d.get('scenes'));print('SCENE',d.get('scene'))
+          for i,node in enumerate(d.get('nodes',[])):print('NODE',i,node.get('name'),{k:node.get(k) for k in ('mesh','children','translation','rotation','scale') if k in node})
+          for i,m in enumerate(d.get('meshes',[])):print('MESH',i,m.get('name'),'primitives',len(m.get('primitives',[])))
+          for i,a in enumerate(d.get('accessors',[])):
+            if a.get('type')=='VEC3' and ('min'in a or 'max'in a): print('ACCESSOR',i,a.get('count'),a.get('min'),a.get('max'))
+          PY
