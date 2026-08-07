@@ -5,7 +5,8 @@ on:
     paths: ['ops/order010-deploy-request.json']
 permissions:
   contents: read
-  issues: write
+  actions: read
+  checks: read
   deployments: write
 env:
   AUD_COMMENT_ID: 5214873711
@@ -18,7 +19,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,9 +71,17 @@ jobs:
           npm run inventory
           npm run build
           npm run bundle:report
+          test -s dist/vendor/three.core.js
           test -s dist/assets/voyager-probe-a.glb
           echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  dist/assets/voyager-probe-a.glb' | sha256sum -c -
           jq -e '.horizonsCrosscheck.pass == true and .sampleCount >= 400' artifacts/science-evidence/spice-horizons-crosscheck.json >/dev/null
+      - name: Exact-SHA browser and accessibility verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false @playwright/test@1.62.0 @axe-core/playwright@4.12.1
+          npx playwright install --with-deps chromium webkit
+          npm run test:e2e
       - name: Listener verification
         shell: bash
         run: |
@@ -90,6 +99,22 @@ jobs:
           set -euo pipefail
           npx --yes wrangler@4.114.0 deploy --dry-run --outdir .wrangler-dry-run 2>&1 | tee artifacts/order010/wrangler-dry-run.txt
           test -s .wrangler-dry-run/index.js
+      - name: Require exact-SHA CodeQL success
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 36); do
+            checks="$(curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")"
+            state="$(printf '%s' "$checks" | jq -r '[.check_runs[]|select(.name=="CodeQL")]|if length==0 then "missing" elif any(.conclusion=="failure" or .conclusion=="cancelled" or .conclusion=="timed_out" or .conclusion=="action_required") then "failed" elif any(.status!="completed") then "pending" elif all(.conclusion=="success" or .conclusion=="neutral" or .conclusion=="skipped") then "success" else "pending" end')"
+            echo "CODEQL_STATE=$state"
+            test "$state" != failed || exit 33
+            if test "$state" = success; then exit 0; fi
+            sleep 5
+          done
+          echo 'CodeQL did not reach success for exact deploy SHA.' >&2
+          exit 34
       - name: Deploy exact audited SHA
         id: cloudflare
         shell: bash
@@ -126,7 +151,7 @@ jobs:
           curl --fail --silent --show-error -D artifacts/order010/production/headers.txt -o /dev/null "$PRODUCTION_URL/"
           grep -q 'VOYAGER LINK' artifacts/order010/production/index.html
           echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  artifacts/order010/production/model.glb' | sha256sum -c -
-          jq -e '.crosscheck.pass == true and .samples|length >= 400' artifacts/order010/production/trajectory.json >/dev/null
+          jq -e '.crosscheck.pass == true and (.samples|length) >= 400' artifacts/order010/production/trajectory.json >/dev/null
           jq -e '.sourceMode == "NO_SOURCE" or .sourceMode == "LOST"' artifacts/order010/production/receiver.json >/dev/null
           grep -qi '^x-content-type-options: nosniff' artifacts/order010/production/headers.txt
           grep -qi '^content-security-policy:' artifacts/order010/production/headers.txt
@@ -138,7 +163,7 @@ jobs:
           await new Promise((resolve,reject)=>{const ws=new WebSocket(url);const timer=setTimeout(()=>reject(new Error('websocket timeout')),10000);ws.onmessage=e=>{const data=JSON.parse(String(e.data));if(!['NO_SOURCE','LOST'].includes(data.sourceMode))return reject(new Error('unexpected live state'));clearTimeout(timer);ws.close();resolve()};ws.onerror=()=>reject(new Error('websocket error'))});
           console.log('RECEIVER_HUB_WEBSOCKET=PASS');
           NODE
-          jq -n --arg sha "$GITHUB_SHA" --arg url "$PRODUCTION_URL" --arg version '${{ steps.cloudflare.outputs.version_id }}' --arg run "$GITHUB_RUN_ID" '{schemaVersion:1,status:"DEPLOYED_READY_FOR_AUD",headSha:$sha,productionUrl:$url,cloudflareVersionId:$version,githubRunId:$run,costGuard:"USD_0_FREE_PLAN_COMPATIBLE",paymentData:"NO",rfTx:"NO",mainMerge:"NO",verifiedAt:(now|todateiso8601)}' > artifacts/order010/production-checkpoint.json
+          jq -n --arg sha "$GITHUB_SHA" --arg url "$PRODUCTION_URL" --arg version '${{ steps.cloudflare.outputs.version_id }}' --arg run "$GITHUB_RUN_ID" '{schemaVersion:1,status:"PRODUCTION_VERIFIED_PENDING_GITHUB_SYNC",headSha:$sha,productionUrl:$url,cloudflareVersionId:$version,githubRunId:$run,costGuard:"USD_0_FREE_PLAN_COMPATIBLE",paymentData:"NO",rfTx:"NO",mainMerge:"NO",verifiedAt:(now|todateiso8601)}' > artifacts/order010/production-checkpoint.json
       - name: Create GitHub production deployment record
         env:
           GH_TOKEN: ${{ github.token }}
@@ -152,44 +177,17 @@ jobs:
           status="$(jq -n --arg url "$PRODUCTION_URL" '{state:"success",environment:"production",environment_url:$url,description:"ORDER010 production smoke PASS",auto_inactive:true}')"
           curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -H 'content-type: application/json' --data "$status" "https://api.github.com/repos/$GITHUB_REPOSITORY/deployments/$id/statuses" >/dev/null
           echo "$id" > artifacts/order010/github-deployment-id.txt
-      - name: Publish terminal checkpoint to AUD and PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PRODUCTION_URL: ${{ steps.cloudflare.outputs.production_url }}
-          CF_VERSION: ${{ steps.cloudflare.outputs.version_id }}
+      - name: Mark terminal publication deferred until GitHub sync
         shell: bash
         run: |
           set -euo pipefail
-          dep="$(cat artifacts/order010/github-deployment-id.txt)"
-          body="$(cat <<EOF
-          STATUS=DEPLOYED_READY_FOR_AUD
-          ORDER=010
-          ACTION_NOW=CONTINUE_ORDER_010_END_TO_END
-          AUD_COMMENT_ID=5214873711
-          CANONICAL_BRANCH=feat/aud-001-complete-product
-          DEPLOYED_HEAD=$GITHUB_SHA
-          PRODUCTION_URL=$PRODUCTION_URL
-          CLOUDFLARE_VERSION_ID=${CF_VERSION:-UNPARSED}
-          GITHUB_ACTION_RUN=$GITHUB_RUN_ID
-          GITHUB_DEPLOYMENT_ID=$dep
-          PREDEPLOY_GATES=PASS
-          PRODUCTION_SMOKE=PASS
-          HORIZONS_SPICE_CROSSCHECK=PASS
-          RECEIVER_HUB_SQLITE=PASS
-          RECEIVER_HUB_WEBSOCKET=PASS
-          UNSIGNED_INGEST_REJECTION=PASS
-          NASA_MODEL_SHA256=7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821
-          COST_PROFILE=USD_0_FREE_PLAN_COMPATIBLE
-          PAYMENT_DATA=NO
-          RF_TX=NO
-          MAIN_MERGE=NO
-          EOF
-          )"
-          payload="$(jq -n --arg body "$body" '{body:$body}')"
-          for issue in 10 8; do curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -H 'content-type: application/json' --data "$payload" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue/comments" >/dev/null; done
+          printf '%s\n' 'STATUS=PRODUCTION_VERIFIED_PENDING_GITHUB_SYNC' 'FINAL_AUD_CHECKPOINT_PUBLISHED=NO' 'REASON=ORDER010 requires GitHub synchronization and deploy-mechanism cleanup before its single terminal checkpoint.' > artifacts/order010/final-publication-deferred.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: order010-terminal-evidence
-          path: artifacts/order010
+          path: |
+            artifacts/order010
+            playwright-report
+            test-results
           retention-days: 30
