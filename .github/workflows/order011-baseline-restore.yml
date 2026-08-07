@@ -1,0 +1,44 @@
+name: ORDER011 Restore AUD Baseline
+on:
+  push:
+    branches: [feat/order-011-deep-space-lab]
+    paths: ['ops/order011-baseline-restore-request.json']
+permissions:
+  contents: read
+env:
+  BASELINE_SHA: 6b6fccc1952bc4f77640a50c88feb105d5e26f97
+  BASELINE_CLOUDFLARE_VERSION: b4b8e490-3b4f-4f05-898d-b2ace00842bf
+  PRODUCTION_URL: https://voyager-1-live-receiver.simondalmasso44.workers.dev
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authority and recovery guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}" && test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+          jq -e '.action=="RESTORE_ORDER010_AUD_BASELINE" and .baselineSha=="6b6fccc1952bc4f77640a50c88feb105d5e26f97" and .cloudflareVersion=="b4b8e490-3b4f-4f05-898d-b2ace00842bf" and .usdBudget==0 and .paymentData=="NO" and .rfTx=="NO" and .mainMerge=="NO"' ops/order011-baseline-restore-request.json >/dev/null
+          npx --yes wrangler@4.114.0 whoami
+      - name: Restore exact accepted Cloudflare version
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.114.0 rollback "$BASELINE_CLOUDFLARE_VERSION" --message "ORDER011 restore exact AUD-accepted ORDER010 baseline"
+      - name: Verify stable exact baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          streak=0
+          for i in $(seq 1 90); do
+            if curl --fail --silent --show-error --connect-timeout 5 --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v1/health?restore=$i-$RANDOM" -o health.json && jq -e --arg sha "$BASELINE_SHA" '.status=="ok" and .buildSha==$sha' health.json >/dev/null; then streak=$((streak+1)); else streak=0; fi
+            echo "BASELINE_CONVERGENCE attempt=$i streak=$streak"
+            if test "$streak" -ge 3; then break; fi
+            sleep 2
+          done
+          test "$streak" -ge 3
+          echo 'ORDER010_AUD_BASELINE_RESTORED=PASS'
