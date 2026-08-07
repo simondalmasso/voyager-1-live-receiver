@@ -17,7 +17,7 @@ jobs:
       - name: Secret pattern scan
         run: |
           set -e
-          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' --exclude='order011-ci.yml' --exclude='order010-deploy.yml' --exclude='order011-deploy.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
+          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' --exclude='order011-ci.yml' --exclude='order010-deploy.yml' --exclude='order011-deploy.yml' --exclude='order013-final.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
       - name: Remote deploy invariant
         shell: bash
         run: |
@@ -25,7 +25,7 @@ jobs:
           hits="$(grep -RInE 'wrangler +deploy' .github/workflows | grep -v -- '--dry-run' || true)"
           test -z "$hits" && exit 0
           echo "$hits"
-          unexpected="$(printf '%s\n' "$hits" | grep -vE '^\.github/workflows/order01(0|1)-deploy\.yml:' || true)"
+          unexpected="$(printf '%s\n' "$hits" | grep -vE '^\.github/workflows/(order010-deploy|order011-deploy|order013-final)\.yml:' || true)"
           test -z "$unexpected" || { echo "$unexpected"; echo 'Remote deploy command outside audited terminal workflows.' >&2; exit 1; }
           if grep -q '^\.github/workflows/order010-deploy\.yml:' <<<"$hits"; then
             grep -q 'AUD_COMMENT_ID: 5214873711' .github/workflows/order010-deploy.yml
@@ -40,6 +40,14 @@ jobs:
             grep -q 'PAYMENT_DATA: "NO"' .github/workflows/order011-deploy.yml
             grep -q 'RF_TX: "NO"' .github/workflows/order011-deploy.yml
             grep -q 'MAIN_MERGE: "NO"' .github/workflows/order011-deploy.yml
+          fi
+          if grep -q '^\.github/workflows/order013-final\.yml:' <<<"$hits"; then
+            grep -q 'AUD_COMMENT_ID: 5222234625' .github/workflows/order013-final.yml
+            grep -q 'USD_BUDGET: "0"' .github/workflows/order013-final.yml
+            grep -q 'PAYMENT_DATA: "NO"' .github/workflows/order013-final.yml
+            grep -q 'RF_TX: "NO"' .github/workflows/order013-final.yml
+            grep -q 'MAIN_MERGE: "NO"' .github/workflows/order013-final.yml
+            grep -q 'R3_ROLLBACK_VERSION: e96f81ab-0c8a-4c19-b280-ee2af5c13468' .github/workflows/order013-final.yml
           fi
       - name: License inventory
         run: node scripts/inventory.mjs
