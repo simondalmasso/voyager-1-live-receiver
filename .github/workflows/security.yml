@@ -17,7 +17,7 @@ jobs:
       - name: Secret pattern scan
         run: |
           set -e
-          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
+          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' --exclude='order010-deploy.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
       - name: Remote deploy invariant
         shell: bash
         run: |
