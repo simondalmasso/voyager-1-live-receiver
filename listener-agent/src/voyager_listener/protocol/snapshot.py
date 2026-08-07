@@ -1,13 +1,20 @@
 from __future__ import annotations
-from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any
 from voyager_listener.dsp.detector import Detection
 from voyager_listener.provenance import Provenance
 
+SOURCE_MODES = {"TELESCOPE_LIVE_VERIFIED", "RECORDED_AUTHENTIC_VERIFIED", "SYNTHETIC_TEST", "UNVERIFIED_SOURCE", "NO_SOURCE", "STALE", "LOST"}
+
 def signal_snapshot(detection: Detection, spectrum: list[float], *, stream_id: str, sequence: int, source_mode: str, station_id: str, station_name: str, started_at: str, sample_rate_hz: float, center_frequency_hz: float, datatype: str, bin_width_hz: float, provenance: Provenance) -> dict[str, Any]:
-    if source_mode not in {"TELESCOPE_LIVE", "RECORDED_AUTHENTIC", "SYNTHETIC_TEST"}:
+    if source_mode not in SOURCE_MODES:
         raise ValueError("invalid source mode")
+    if source_mode == "TELESCOPE_LIVE_VERIFIED" and provenance.truth_class != "TELESCOPE_LIVE_VERIFIED":
+        raise ValueError("live verified mode requires verified provenance")
+    if source_mode == "RECORDED_AUTHENTIC_VERIFIED" and provenance.truth_class != "RECORDED_AUTHENTIC_VERIFIED":
+        raise ValueError("recorded authentic mode requires verified provenance")
+    if source_mode == "SYNTHETIC_TEST" and provenance.truth_class != "SYNTHETIC_TEST":
+        raise ValueError("synthetic mode requires synthetic provenance")
     analysis = {
         "expectedFrequencyHz": detection.expected_frequency_hz,
         "observedFrequencyHz": detection.observed_frequency_hz,
@@ -16,7 +23,9 @@ def signal_snapshot(detection: Detection, spectrum: list[float], *, stream_id: s
         "confidence": detection.confidence,
         "state": detection.state,
         "integrationSeconds": detection.integration_seconds,
+        "sampleCount": detection.sample_count,
         "droppedSamples": detection.dropped_samples,
+        "persistenceFraction": detection.persistence_fraction,
     }
     return {
         "schemaVersion": 1,
