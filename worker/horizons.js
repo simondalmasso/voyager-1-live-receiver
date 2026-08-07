@@ -12,7 +12,7 @@ export function parseHorizonsVectors(text,fetchedAt=new Date().toISOString()){
   const start=text.indexOf('$$SOE'),end=text.indexOf('$$EOE');if(start<0||end<start)throw new Error('HORIZONS_MARKERS');
   const lines=text.slice(start+5,end).split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   for(const line of lines){
-    const fields=line.split(',').map(x=>x.trim()),dateField=fields.find(x=>/A\.D\.|\d{4}-[A-Z][a-z]{2}-\d{2}/.test(x)),numbers=fields.map(Number);
+    const fields=line.split(',').map(x=>x.trim()),dateField=fields.find(x=>/A\.D\.|\d{4}-[A-Z][a-z]{2}-\d{2}/.test(x)),numbers=fields.map(x=>x===''?NaN:Number(x));
     const first=numbers.findIndex((v,i)=>i>=2&&Number.isFinite(v)&&numbers.slice(i,i+6).every(Number.isFinite));if(first<0)continue;
     const pos=numbers.slice(first,first+3),vel=numbers.slice(first+3,first+6);if(Math.hypot(...pos)<1e8||Math.hypot(...pos)>1e12||Math.hypot(...vel)>100)continue;
     const observed=parseHorizonsDate(dateField)||new Date().toISOString();
@@ -31,7 +31,7 @@ export function parseHorizonsObserver(text,fetchedAt=new Date().toISOString()){
   const rows=[];
   for(const line of text.slice(start+5,end).split(/\r?\n/).map(x=>x.trim()).filter(Boolean)){
     const fields=line.split(',').map(x=>x.trim()),dateField=fields.find(x=>parseHorizonsDate(x));if(!dateField)continue;
-    const nums=[];for(const field of fields){const n=Number(field);if(Number.isFinite(n))nums.push(n)}
+    const nums=[];for(const field of fields){if(field==='')continue;const n=Number(field);if(Number.isFinite(n))nums.push(n)}
     if(nums.length<4)continue;const [azimuthDeg,elevationDeg,rangeAu,rangeRateKmS]=nums.slice(-4);if(!(azimuthDeg>=0&&azimuthDeg<=360&&elevationDeg>=-90&&elevationDeg<=90&&Math.abs(rangeAu)>0&&Math.abs(rangeAu)<1000&&Math.abs(rangeRateKmS)<100))continue;
     rows.push({observedAt:parseHorizonsDate(dateField),azimuthDeg,elevationDeg,rangeKm:rangeAu*AU_KM,rangeRateKmS,fetchedAt});
   }
