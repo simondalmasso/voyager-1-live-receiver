@@ -79,8 +79,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' --exclude='order010-deploy.yml' --exclude='order011-deploy.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
-          ! grep -RInE --exclude-dir=.git --exclude='*.md' '(RF_UPLINK_ENABLED|TRANSMIT_TO_DSN|SEND_COMMAND_TO_VOYAGER)' .
+          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' --exclude='order011-ci.yml' --exclude='order010-deploy.yml' --exclude='order011-deploy.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
+          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='order011-ci.yml' '(RF_UPLINK_ENABLED|TRANSMIT_TO_DSN|SEND_COMMAND_TO_VOYAGER)' .
           grep -RIn 'rawIqToCloud:false' worker/lab.js
           grep -RIn "costProfile:'USD_0'" worker/lab.js
           node scripts/inventory.mjs
