@@ -1,0 +1,32 @@
+name: ORDER010 Final Tree Cleanup
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['.github/workflows/order010-finalize-tree.yml']
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove completed temporary mechanisms
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/workflows/order010-model-inspect.yml \
+            .github/workflows/order010-model.yml \
+            .github/workflows/order010-payload-inspect.yml \
+            .github/workflows/order010-spice.yml \
+            .github/workflows/order010-finalize-tree.yml \
+            aud002-payload.part00 aud002-payload.part01
+          git config user.name 'order010-arq'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore(order010): finalize canonical tree before deploy'
+          git pull --rebase origin feat/aud-001-complete-product
+          git push origin HEAD:feat/aud-001-complete-product
