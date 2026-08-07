@@ -1,0 +1,32 @@
+name: ORDER010 Production Probe
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['.github/workflows/order010-production-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRODUCTION_URL: https://voyager-1-live-receiver.simondalmasso44.workers.dev
+      DEPLOYED_SHA: bbd46bbfa4b17d5a36f384dbba0a39b12a7a1e71
+    steps:
+      - name: Probe production routing and headers
+        shell: bash
+        run: |
+          set -u
+          for path in / /api/v1/health /api/v1/sources /api/v1/voyager/state /api/v1/receiver/snapshot /manifest.webmanifest /assets/voyager-probe-a.glb; do
+            echo "=== $path ==="
+            curl --silent --show-error --location --connect-timeout 8 --max-time 20 -D /tmp/h -o /tmp/b -w 'HTTP=%{http_code} TYPE=%{content_type} SIZE=%{size_download}\n' "$PRODUCTION_URL$path" || true
+            sed -n '1,20p' /tmp/h
+            case "$path" in *.glb) sha256sum /tmp/b ;; *) head -c 800 /tmp/b; echo ;; esac
+          done
+      - name: Assert deployed health if routing is live
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 4 --retry-all-errors --retry-delay 2 "$PRODUCTION_URL/api/v1/health" -o /tmp/health.json
+          cat /tmp/health.json
+          jq -e --arg sha "$DEPLOYED_SHA" '.status=="ok" and .worker=="healthy" and .buildSha==$sha' /tmp/health.json >/dev/null
