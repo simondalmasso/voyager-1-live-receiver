@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "order": 10,
+  "action": "CONTINUE_ORDER_010_END_TO_END",
+  "audCommentId": 5214873711,
+  "canonicalBranch": "feat/aud-001-complete-product",
+  "workerName": "voyager-1-live-receiver",
+  "usdBudget": 0,
+  "paymentData": "NO",
+  "rfTx": "NO",
+  "mainMerge": "NO",
+  "requestedAt": "2026-08-07T12:01:00Z",
+  "terminalState": "DEPLOYED_READY_FOR_AUD"
+}
