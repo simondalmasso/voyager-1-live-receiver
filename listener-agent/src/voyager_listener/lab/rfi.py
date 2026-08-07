@@ -33,8 +33,10 @@ def masked_copy(values:list[float],mask:RFIMask,replacement:float|None=None)->li
         if 0<=i<len(out):out[i]=repl
     return out
 
-def candidate_score(*,frequency_residual_hz:float,drift_residual_hz_s:float,persistence:float,snr_db:float,stationary_rfi:bool,off_target_conflict:bool,frequency_window_hz:float=50.0,drift_window_hz_s:float=1.0)->dict:
-    freq=max(0.0,1-abs(frequency_residual_hz)/max(frequency_window_hz,1e-9)); drift=max(0.0,1-abs(drift_residual_hz_s)/max(drift_window_hz_s,1e-9)); snr=max(0.0,min(1.0,(snr_db+3)/18)); persist=max(0.0,min(1.0,persistence)); score=.3*freq+.25*drift+.25*persist+.2*snr
+def candidate_score(*,frequency_residual_hz:float|None,drift_residual_hz_s:float|None,persistence:float|None,snr_db:float|None,stationary_rfi:bool|None,off_target_conflict:bool|None,frequency_window_hz:float=50.0,drift_window_hz_s:float=1.0)->dict:
+    values={"frequencyResidualHz":frequency_residual_hz,"driftResidualHzS":drift_residual_hz_s,"persistence":persistence,"snrDb":snr_db,"stationaryRfi":stationary_rfi,"offTargetConflict":off_target_conflict};missing=[name for name,value in values.items() if value is None]
+    if missing:return {"score":None,"frequencyConsistency":None,"driftConsistency":None,"persistence":persistence,"snrComponent":None,"stationaryRfi":stationary_rfi,"offTargetConflict":off_target_conflict,"classification":"INSUFFICIENT_EVIDENCE","missing":missing,"measured":values}
+    freq=max(0.0,1-abs(float(frequency_residual_hz))/max(frequency_window_hz,1e-9)); drift=max(0.0,1-abs(float(drift_residual_hz_s))/max(drift_window_hz_s,1e-9)); snr=max(0.0,min(1.0,(float(snr_db)+3)/18)); persist=max(0.0,min(1.0,float(persistence))); score=.3*freq+.25*drift+.25*persist+.2*snr
     if stationary_rfi:score*=.2
     if off_target_conflict:score*=.35
-    return {"score":round(score,6),"frequencyConsistency":freq,"driftConsistency":drift,"persistence":persist,"snrComponent":snr,"stationaryRfi":stationary_rfi,"offTargetConflict":off_target_conflict,"classification":"CANDIDATE" if score>=.65 and not stationary_rfi and not off_target_conflict else "REJECTED_OR_WEAK"}
+    return {"score":round(score,6),"frequencyConsistency":freq,"driftConsistency":drift,"persistence":persist,"snrComponent":snr,"stationaryRfi":stationary_rfi,"offTargetConflict":off_target_conflict,"classification":"CANDIDATE" if score>=.65 and not stationary_rfi and not off_target_conflict else "REJECTED_OR_WEAK","missing":[],"measured":values}
