@@ -1,7 +1,7 @@
 name: Security
 on:
   push:
-    branches: [main, feat/aud-001-complete-product]
+    branches: [main, feat/aud-001-complete-product, feat/order-011-deep-space-lab]
   pull_request:
     branches: [main]
 permissions:
@@ -17,7 +17,7 @@ jobs:
       - name: Secret pattern scan
         run: |
           set -e
-          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' --exclude='order010-deploy.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
+          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' --exclude='order010-deploy.yml' --exclude='order011-deploy.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
       - name: Remote deploy invariant
         shell: bash
         run: |
@@ -25,17 +25,22 @@ jobs:
           hits="$(grep -RInE 'wrangler +deploy' .github/workflows | grep -v -- '--dry-run' || true)"
           test -z "$hits" && exit 0
           echo "$hits"
-          unexpected="$(printf '%s\n' "$hits" | grep -v '^\.github/workflows/order010-deploy\.yml:' || true)"
-          if test -n "$unexpected"; then
-            echo 'Remote deploy command detected outside the audited ORDER010 terminal workflow.' >&2
-            exit 1
+          unexpected="$(printf '%s\n' "$hits" | grep -vE '^\.github/workflows/order01(0|1)-deploy\.yml:' || true)"
+          test -z "$unexpected" || { echo "$unexpected"; echo 'Remote deploy command outside audited terminal workflows.' >&2; exit 1; }
+          if grep -q '^\.github/workflows/order010-deploy\.yml:' <<<"$hits"; then
+            grep -q 'AUD_COMMENT_ID: 5214873711' .github/workflows/order010-deploy.yml
+            grep -q 'USD_BUDGET: "0"' .github/workflows/order010-deploy.yml
+            grep -q 'PAYMENT_DATA: "NO"' .github/workflows/order010-deploy.yml
+            grep -q 'RF_TX: "NO"' .github/workflows/order010-deploy.yml
+            grep -q 'MAIN_MERGE: "NO"' .github/workflows/order010-deploy.yml
           fi
-          test -f .github/workflows/order010-deploy.yml || { echo 'Deploy reference exists without audited workflow.' >&2; exit 1; }
-          grep -q 'AUD_COMMENT_ID: 5214873711' .github/workflows/order010-deploy.yml
-          grep -q 'USD_BUDGET: "0"' .github/workflows/order010-deploy.yml
-          grep -q 'PAYMENT_DATA: "NO"' .github/workflows/order010-deploy.yml
-          grep -q 'RF_TX: "NO"' .github/workflows/order010-deploy.yml
-          grep -q 'MAIN_MERGE: "NO"' .github/workflows/order010-deploy.yml
+          if grep -q '^\.github/workflows/order011-deploy\.yml:' <<<"$hits"; then
+            grep -q 'AUD_COMMENT_ID: 5217561657' .github/workflows/order011-deploy.yml
+            grep -q 'USD_BUDGET: "0"' .github/workflows/order011-deploy.yml
+            grep -q 'PAYMENT_DATA: "NO"' .github/workflows/order011-deploy.yml
+            grep -q 'RF_TX: "NO"' .github/workflows/order011-deploy.yml
+            grep -q 'MAIN_MERGE: "NO"' .github/workflows/order011-deploy.yml
+          fi
       - name: License inventory
         run: node scripts/inventory.mjs
       - uses: actions/upload-artifact@v4
