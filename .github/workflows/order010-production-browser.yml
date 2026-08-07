@@ -11,8 +11,8 @@ jobs:
     timeout-minutes: 25
     env:
       PRODUCTION_URL: https://voyager-1-live-receiver.simondalmasso44.workers.dev
-      DEPLOYED_SHA: 9874f5634296fbd55d8a7c20618a35b18ce4fda6
-      CLOUDFLARE_VERSION_ID: e372adfe-451c-479a-9445-d4b2e227b92d
+      DEPLOYED_SHA: b483f6edb0d19ebe7c774d87346f2a9752eb413e
+      CLOUDFLARE_VERSION_ID: efd45eb2-27f6-4576-846d-ccd709892a46
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
