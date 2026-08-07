@@ -1,7 +1,7 @@
 import { makeVoyagerState } from '../shared/contracts.js';
 const ENDPOINT='https://ssd.jpl.nasa.gov/api/horizons.api';
 const AU_KM=149597870.7;
-const fmt=d=>d.toISOString().replace('T',' ').replace('.000Z','');
+const fmt=d=>d.toISOString().replace('T',' ').replace(/\.\d{3}Z$/,'');
 export function buildHorizonsUrl(at=new Date()){
   const stop=new Date(at.getTime()+60_000);
   const q=new URLSearchParams({format:'text',COMMAND:"'-31'",OBJ_DATA:'NO',MAKE_EPHEM:'YES',EPHEM_TYPE:'VECTORS',CENTER:"'500@399'",START_TIME:`'${fmt(at)}'`,STOP_TIME:`'${fmt(stop)}'`,STEP_SIZE:"'1 m'",REF_SYSTEM:'ICRF',REF_PLANE:'FRAME',OUT_UNITS:'KM-S',VEC_LABELS:'NO',VEC_CORR:'NONE',CSV_FORMAT:'YES'});
