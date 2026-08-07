@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {stationPhysics,observationWindow,labCapabilities,pipelineTelemetry} from '../worker/lab.js';
+const state={observedAt:'2026-08-07T12:00:00Z',positionKm:[2.4e10,1e10,4e9],velocityKmS:[16,2,1],provenance:{truthClass:'DERIVED_GEOMETRY',sourceId:'fixture'}};
+
+test('station physics stays an estimate and exposes calibrated math',()=>{const out=stationPhysics({antennaDiameterM:'20',apertureEfficiency:'.6',systemTemperatureK:'50',bandwidthHz:'1',integrationSeconds:'100',frequencyHz:'8420000000',polarization:'dual',calibrated:'true'});assert.equal(out.classification,'STATION_MODEL_CALIBRATED');assert.equal(out.feasibility,'FEASIBILITY_ESTIMATE');assert.ok(out.gOverTDbPerK>10);assert.ok(out.sefdJy>0);assert.doesNotMatch(JSON.stringify(out),/CAN_RECEIVE_VOYAGER/)});
+test('incomplete station model identifies missing inputs',()=>{const out=stationPhysics({});assert.equal(out.classification,'STATION_MODEL_INCOMPLETE');assert.ok(out.missing.length>=4)});
+test('observation windows remain advisory deep-space products',()=>{const out=observationWindow(state,{lat:'-31.4',lon:'-64.2',elevation:'500',minElevationDeg:'-90',durationMinutes:'30',stepMinutes:'15'});assert.equal(out.schemaVersion,2);assert.equal(out.receiveOnly,true);assert.equal(out.advisory,true);assert.equal(out.predictions.length,3);assert.match(out.predictionFreshness,/LINEARIZED/)});
+test('capabilities prohibit raw IQ cloud and coherent level 3 claims',()=>{const caps=labCapabilities();assert.equal(caps.canonicalIQBus.rawIqToCloud,false);assert.equal(caps.multiStation.level3Claim,false);assert.equal(caps.decoder.currentVoyagerTelemetryClaim,false);assert.equal(caps.costProfile,'USD_0')});
+test('pipeline topology reflects reduced snapshot truth',()=>{const p=pipelineTelemetry({sourceMode:'SYNTHETIC_TEST',analysis:{state:'SEARCHING',confidence:.2},provenance:{truthClass:'SYNTHETIC_TEST'}});assert.equal(p.rawIqCloud,false);assert.equal(p.truthClass,'SYNTHETIC_TEST');assert.equal(p.stages.at(-1).id,'EVIDENCE')});
