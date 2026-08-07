@@ -15,9 +15,9 @@
       { "name": "RECEIVER_HUB", "class_name": "ReceiverHub" }
     ]
   },
-  "exports": {
-    "ReceiverHub": { "type": "durable-object", "storage": "sqlite" }
-  },
+  "migrations": [
+    { "tag": "order010-receiver-hub-v1", "new_sqlite_classes": ["ReceiverHub"] }
+  ],
   "vars": {
     "APP_ENV": "production",
     "PUBLIC_TRUTH_POLICY": "receive-only"
