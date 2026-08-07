@@ -12,9 +12,9 @@ def frames_from_chunks(chunks:Iterable[list[complex]],*,stream_id:str,sample_rat
     for sequence,chunk in enumerate(chunks):
         at=origin+timedelta(seconds=sample_start/sample_rate_hz)
         yield CanonicalIQFrame(stream_id,sequence,sample_start,len(chunk),sample_rate_hz,center_frequency_hz,datatype,_iso(at),timestamp_quality,0,truth_class,provenance_id,tuple(chunk));sample_start+=len(chunk)
-def sigmf_frames(meta_path:str|Path,chunk_samples:int=65536)->Iterator[CanonicalIQFrame]:
-    info=inspect(meta_path);global_meta=info.metadata.get("global",{});start=global_meta.get("core:datetime") or global_meta.get("voyager:observation_time") or "1970-01-01T00:00:00Z"
-    yield from frames_from_chunks(read_chunks(info,chunk_samples),stream_id=info.data_sha256[:16],sample_rate_hz=info.sample_rate_hz,center_frequency_hz=info.center_frequency_hz,truth_class=info.truth_class,provenance_id=info.data_sha256,start_time=start,datatype=info.datatype,timestamp_quality="RECORDED")
+def sigmf_frames(meta_path:str|Path,chunk_samples:int=65536,*,truth_class:str|None=None,provenance_id:str|None=None)->Iterator[CanonicalIQFrame]:
+    info=inspect(meta_path);global_meta=info.metadata.get("global",{});captures=info.metadata.get("captures",[]);start=(captures[0].get("core:datetime") if captures else None) or global_meta.get("core:datetime") or global_meta.get("voyager:observation_time") or "1970-01-01T00:00:00Z";truth=truth_class or info.truth_class;prov=provenance_id or info.data_sha256
+    yield from frames_from_chunks(read_chunks(info,chunk_samples),stream_id=info.data_sha256[:16],sample_rate_hz=info.sample_rate_hz,center_frequency_hz=info.center_frequency_hz,truth_class=truth,provenance_id=prov,start_time=start,datatype=info.datatype,timestamp_quality="RECORDED")
 def soapy_frames(driver:str,sample_rate_hz:float,center_frequency_hz:float,*,stream_id:str="soapy-live",provenance_id:str="local-soapysdr",chunk_samples:int=16384,truth_class:str="UNVERIFIED_SOURCE",**settings:object)->Iterator[CanonicalIQFrame]:
     from voyager_listener.sources.soapy_source import cf32_chunks
     chunks=cf32_chunks(driver,sample_rate_hz,center_frequency_hz,chunk_samples,**settings)
