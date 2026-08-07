@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "order": 10,
+  "attempt": 2,
   "action": "CONTINUE_ORDER_010_END_TO_END",
   "audCommentId": 5214873711,
   "canonicalBranch": "feat/aud-001-complete-product",
@@ -9,6 +10,7 @@
   "paymentData": "NO",
   "rfTx": "NO",
   "mainMerge": "NO",
-  "requestedAt": "2026-08-07T12:01:00Z",
-  "terminalState": "DEPLOYED_READY_FOR_AUD"
+  "requestedAt": "2026-08-07T12:14:00Z",
+  "terminalState": "DEPLOYED_READY_FOR_AUD",
+  "repairBasis": "truthful WebGL fallback label after production browser evidence"
 }
