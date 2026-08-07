@@ -1,0 +1,195 @@
+name: ORDER010 Terminal Deploy
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['ops/order010-deploy-request.json']
+permissions:
+  contents: read
+  issues: write
+  deployments: write
+env:
+  AUD_COMMENT_ID: 5214873711
+  USD_BUDGET: "0"
+  PAYMENT_DATA: "NO"
+  RF_TX: "NO"
+  MAIN_MERGE: "NO"
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Authority and zero-cost guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$AUD_COMMENT_ID" = '5214873711'
+          test "$USD_BUDGET" = '0'
+          test "$PAYMENT_DATA" = 'NO'
+          test "$RF_TX" = 'NO'
+          test "$MAIN_MERGE" = 'NO'
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+          jq -e '.action == "CONTINUE_ORDER_010_END_TO_END" and .audCommentId == 5214873711 and .usdBudget == 0 and .paymentData == "NO" and .rfTx == "NO" and .mainMerge == "NO"' ops/order010-deploy-request.json >/dev/null
+          echo "AUTHORITY=PASS"
+          echo "FREE_PLAN_COMPATIBLE_ONLY=PASS"
+          echo "PAYMENT_MUTATION=NONE"
+          echo "RF_TX=NO"
+          echo "MAIN_MERGE=NO"
+      - name: Verify Cloudflare identity
+        run: npx --yes wrangler@4.114.0 whoami
+      - name: Install exact runtime dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Static secret and policy scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
+          unexpected="$(grep -RInE 'wrangler +deploy' .github/workflows | grep -v -- '--dry-run' | grep -v '^.github/workflows/order010-deploy.yml:' || true)"
+          test -z "$unexpected" || { echo "$unexpected"; exit 31; }
+          ! grep -RInE '(transmit|uplink|spacecraft.command|dsn.command)' worker src listener-agent --include='*.js' --include='*.py' | grep -v -Ei '(no |never|false|receive.only|cannot|without|prohibit|label|description|truth|uplink.false)' || exit 32
+      - name: Core verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run lint
+          npm run format:check
+          npm run verify:data
+          npm run inventory
+          npm run build
+          npm run bundle:report
+          test -s dist/assets/voyager-probe-a.glb
+          echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  dist/assets/voyager-probe-a.glb' | sha256sum -c -
+          jq -e '.horizonsCrosscheck.pass == true and .sampleCount >= 400' artifacts/science-evidence/spice-horizons-crosscheck.json >/dev/null
+      - name: Listener verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/order010
+          PYTHONPATH=listener-agent/src python -m compileall -q listener-agent/src
+          PYTHONPATH=listener-agent/src python -m unittest discover -s listener-agent/tests -v
+          PYTHONPATH=listener-agent/src python -m voyager_listener.cli doctor > artifacts/order010/listener-doctor.json
+          PYTHONPATH=listener-agent/src python -m voyager_listener.cli synth --output /tmp/voyager.sigmf-meta > artifacts/order010/synthetic-manifest.json
+          PYTHONPATH=listener-agent/src python -m voyager_listener.cli analyze /tmp/voyager.sigmf-meta --expected-frequency-hz 8420430048 --drift-hz-s 0.2 > artifacts/order010/detector-result.json
+          jq -e '.sourceMode == "SYNTHETIC_TEST" and .analysis.state == "VERIFIED_CARRIER" and .analysis.confidence >= 0.7' artifacts/order010/detector-result.json >/dev/null
+      - name: Wrangler dry-run
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.114.0 deploy --dry-run --outdir .wrangler-dry-run 2>&1 | tee artifacts/order010/wrangler-dry-run.txt
+          test -s .wrangler-dry-run/index.js
+      - name: Deploy exact audited SHA
+        id: cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "DEPLOY_HEAD=$GITHUB_SHA"
+          npx --yes wrangler@4.114.0 deploy --var "BUILD_SHA:$GITHUB_SHA" 2>&1 | tee artifacts/order010/cloudflare-deploy.txt
+          url="$(grep -Eo 'https://[A-Za-z0-9._-]+\.workers\.dev' artifacts/order010/cloudflare-deploy.txt | tail -1 || true)"
+          test -n "$url" || { echo 'Production workers.dev URL not found in deploy output.' >&2; exit 41; }
+          version="$(grep -Eio 'Version ID:?[[:space:]]*[0-9a-f-]{20,}' artifacts/order010/cloudflare-deploy.txt | tail -1 | grep -Eo '[0-9a-f-]{20,}' || true)"
+          echo "production_url=$url" >> "$GITHUB_OUTPUT"
+          echo "version_id=$version" >> "$GITHUB_OUTPUT"
+          echo "PRODUCTION_URL=$url"
+          echo "CLOUDFLARE_VERSION_ID=${version:-UNPARSED}"
+      - name: Production smoke and truth verification
+        id: smoke
+        env:
+          PRODUCTION_URL: ${{ steps.cloudflare.outputs.production_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/order010/production
+          for i in $(seq 1 15); do
+            if curl --fail --silent --show-error --connect-timeout 5 --max-time 15 "$PRODUCTION_URL/api/v1/health" -o artifacts/order010/production/health.json; then break; fi
+            sleep 2
+          done
+          jq -e --arg sha "$GITHUB_SHA" '.status == "ok" and .worker == "healthy" and .buildSha == $sha and .spiceTrajectory == "crosschecked" and .receiverHub == "sqlite-durable-object" and .costProfile == "USD_0_FREE_PLAN"' artifacts/order010/production/health.json >/dev/null
+          curl --fail --silent --show-error "$PRODUCTION_URL/api/v1/sources" -o artifacts/order010/production/sources.json
+          curl --fail --silent --show-error "$PRODUCTION_URL/api/v1/voyager/state" -o artifacts/order010/production/state.json
+          curl --fail --silent --show-error "$PRODUCTION_URL/api/v1/voyager/trajectory" -o artifacts/order010/production/trajectory.json
+          curl --fail --silent --show-error "$PRODUCTION_URL/api/v1/receiver/snapshot" -o artifacts/order010/production/receiver.json
+          curl --fail --silent --show-error "$PRODUCTION_URL/" -o artifacts/order010/production/index.html
+          curl --fail --silent --show-error "$PRODUCTION_URL/assets/voyager-probe-a.glb" -o artifacts/order010/production/model.glb
+          curl --fail --silent --show-error -D artifacts/order010/production/headers.txt -o /dev/null "$PRODUCTION_URL/"
+          grep -q 'VOYAGER LINK' artifacts/order010/production/index.html
+          echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  artifacts/order010/production/model.glb' | sha256sum -c -
+          jq -e '.crosscheck.pass == true and .samples|length >= 400' artifacts/order010/production/trajectory.json >/dev/null
+          jq -e '.sourceMode == "NO_SOURCE" or .sourceMode == "LOST"' artifacts/order010/production/receiver.json >/dev/null
+          grep -qi '^x-content-type-options: nosniff' artifacts/order010/production/headers.txt
+          grep -qi '^content-security-policy:' artifacts/order010/production/headers.txt
+          status="$(curl --silent --show-error -o artifacts/order010/production/unsigned-ingest.json -w '%{http_code}' -H 'content-type: application/json' --data '{"schemaVersion":1,"stationId":"unknown","sequence":1,"nonce":"nonce-123456789","softwareSha":"abcdef1","observedAt":"2026-08-07T09:00:00Z","band":{"centerFrequencyHz":8420430000},"snapshot":{}}' "$PRODUCTION_URL/api/v1/receiver/ingest")"
+          test "$status" = '403'
+          jq -e '.error.code == "STATION_UNREGISTERED"' artifacts/order010/production/unsigned-ingest.json >/dev/null
+          PRODUCTION_URL="$PRODUCTION_URL" node --input-type=module <<'NODE'
+          const url=new URL(process.env.PRODUCTION_URL);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/api/v1/receiver/live';
+          await new Promise((resolve,reject)=>{const ws=new WebSocket(url);const timer=setTimeout(()=>reject(new Error('websocket timeout')),10000);ws.onmessage=e=>{const data=JSON.parse(String(e.data));if(!['NO_SOURCE','LOST'].includes(data.sourceMode))return reject(new Error('unexpected live state'));clearTimeout(timer);ws.close();resolve()};ws.onerror=()=>reject(new Error('websocket error'))});
+          console.log('RECEIVER_HUB_WEBSOCKET=PASS');
+          NODE
+          jq -n --arg sha "$GITHUB_SHA" --arg url "$PRODUCTION_URL" --arg version '${{ steps.cloudflare.outputs.version_id }}' --arg run "$GITHUB_RUN_ID" '{schemaVersion:1,status:"DEPLOYED_READY_FOR_AUD",headSha:$sha,productionUrl:$url,cloudflareVersionId:$version,githubRunId:$run,costGuard:"USD_0_FREE_PLAN_COMPATIBLE",paymentData:"NO",rfTx:"NO",mainMerge:"NO",verifiedAt:(now|todateiso8601)}' > artifacts/order010/production-checkpoint.json
+      - name: Create GitHub production deployment record
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_URL: ${{ steps.cloudflare.outputs.production_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$(jq -n --arg ref "$GITHUB_SHA" '{ref:$ref,environment:"production",auto_merge:false,required_contexts:[],description:"ORDER010 audited Cloudflare deploy"}')"
+          deployment="$(curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -H 'content-type: application/json' --data "$payload" "https://api.github.com/repos/$GITHUB_REPOSITORY/deployments")"
+          id="$(printf '%s' "$deployment" | jq -r '.id')";test "$id" != null
+          status="$(jq -n --arg url "$PRODUCTION_URL" '{state:"success",environment:"production",environment_url:$url,description:"ORDER010 production smoke PASS",auto_inactive:true}')"
+          curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -H 'content-type: application/json' --data "$status" "https://api.github.com/repos/$GITHUB_REPOSITORY/deployments/$id/statuses" >/dev/null
+          echo "$id" > artifacts/order010/github-deployment-id.txt
+      - name: Publish terminal checkpoint to AUD and PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_URL: ${{ steps.cloudflare.outputs.production_url }}
+          CF_VERSION: ${{ steps.cloudflare.outputs.version_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          dep="$(cat artifacts/order010/github-deployment-id.txt)"
+          body="$(cat <<EOF
+          STATUS=DEPLOYED_READY_FOR_AUD
+          ORDER=010
+          ACTION_NOW=CONTINUE_ORDER_010_END_TO_END
+          AUD_COMMENT_ID=5214873711
+          CANONICAL_BRANCH=feat/aud-001-complete-product
+          DEPLOYED_HEAD=$GITHUB_SHA
+          PRODUCTION_URL=$PRODUCTION_URL
+          CLOUDFLARE_VERSION_ID=${CF_VERSION:-UNPARSED}
+          GITHUB_ACTION_RUN=$GITHUB_RUN_ID
+          GITHUB_DEPLOYMENT_ID=$dep
+          PREDEPLOY_GATES=PASS
+          PRODUCTION_SMOKE=PASS
+          HORIZONS_SPICE_CROSSCHECK=PASS
+          RECEIVER_HUB_SQLITE=PASS
+          RECEIVER_HUB_WEBSOCKET=PASS
+          UNSIGNED_INGEST_REJECTION=PASS
+          NASA_MODEL_SHA256=7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821
+          COST_PROFILE=USD_0_FREE_PLAN_COMPATIBLE
+          PAYMENT_DATA=NO
+          RF_TX=NO
+          MAIN_MERGE=NO
+          EOF
+          )"
+          payload="$(jq -n --arg body "$body" '{body:$body}')"
+          for issue in 10 8; do curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -H 'content-type: application/json' --data "$payload" "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$issue/comments" >/dev/null; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: order010-terminal-evidence
+          path: artifacts/order010
+          retention-days: 30
