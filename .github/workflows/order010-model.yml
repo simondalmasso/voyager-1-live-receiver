@@ -1,0 +1,43 @@
+name: ORDER010 NASA Model
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['.github/workflows/order010-model.yml']
+permissions:
+  contents: write
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Download exact NASA asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          url='https://raw.githubusercontent.com/nasa/NASA-3D-Resources/11ebb4ee043715aefbba6aeec8a61746fad67fa7/3D%20Models/Voyager%20Probe%20(A)/Voyager%20Probe%20(A).glb'
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 "$url" -o assets/voyager-probe-a.glb
+          test "$(git hash-object assets/voyager-probe-a.glb)" = '3126b064d25762796a5fdefca8e430104764070d'
+          sha256sum assets/voyager-probe-a.glb
+          python - <<'PY'
+          import json,struct,hashlib,pathlib
+          p=pathlib.Path('assets/voyager-probe-a.glb');b=p.read_bytes()
+          magic,version,total=struct.unpack_from('<4sII',b,0)
+          assert magic==b'glTF' and version==2 and total==len(b)
+          n,typ=struct.unpack_from('<II',b,12);assert typ==0x4E4F534A
+          doc=json.loads(b[20:20+n].decode('utf-8').rstrip('\x00 '))
+          print('GLB_BYTES',len(b));print('GLB_SHA256',hashlib.sha256(b).hexdigest());print('EXTENSIONS_USED',doc.get('extensionsUsed',[]));print('MESHES',len(doc.get('meshes',[])));print('PRIMITIVES',sum(len(m.get('primitives',[])) for m in doc.get('meshes',[])))
+          meta={'schemaVersion':1,'source':'NASA 3D Resources','sourceUrl':'https://science.nasa.gov/3d-resources/voyager-probe-a/','repository':'https://github.com/nasa/NASA-3D-Resources','sourceCommit':'11ebb4ee043715aefbba6aeec8a61746fad67fa7','sourceGitBlob':'3126b064d25762796a5fdefca8e430104764070d','sha256':hashlib.sha256(b).hexdigest(),'bytes':len(b),'usagePolicy':'https://www.nasa.gov/nasa-brand-center/images-and-media/','credit':'NASA','role':'PRIMARY_VISUAL_MODEL','proceduralFallback':'src/scene.js'}
+          pathlib.Path('assets/voyager-probe-a.provenance.json').write_text(json.dumps(meta,indent=2)+'\n')
+          PY
+      - name: Commit pinned model
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'order010-arq'
+          git config user.email 'actions@users.noreply.github.com'
+          git add assets/voyager-probe-a.glb assets/voyager-probe-a.provenance.json
+          git commit -m 'feat(order010): add pinned official NASA Voyager GLB'
+          git push origin HEAD:feat/aud-001-complete-product
