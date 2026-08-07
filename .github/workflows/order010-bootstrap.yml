@@ -1,0 +1,28 @@
+name: ORDER010 Bootstrap Inspect
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths:
+      - '.github/workflows/order010-bootstrap.yml'
+permissions:
+  contents: read
+jobs:
+  inspect-aud002-payload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect staged AUD-002 payload without applying it
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat aud002-payload.part00 aud002-payload.part01 | base64 -d > /tmp/aud002.gz
+          echo "gzip_sha256=$(sha256sum /tmp/aud002.gz | awk '{print $1}')"
+          gzip -t /tmp/aud002.gz
+          gzip -dc /tmp/aud002.gz > /tmp/aud002.payload
+          echo "payload_bytes=$(wc -c < /tmp/aud002.payload)"
+          echo "payload_type=$(file -b /tmp/aud002.payload)"
+          echo '--- first 40 lines ---'
+          head -40 /tmp/aud002.payload || true
+          echo '--- tar listing if applicable ---'
+          tar -tf /tmp/aud002.payload 2>/dev/null | head -120 || true
