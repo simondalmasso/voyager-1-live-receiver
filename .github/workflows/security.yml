@@ -18,13 +18,24 @@ jobs:
         run: |
           set -e
           ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
-      - name: No remote deploy invariant
+      - name: Remote deploy invariant
+        shell: bash
         run: |
-          set -e
-          if grep -RInE 'wrangler +deploy' .github/workflows | grep -v -- '--dry-run'; then
-            echo 'Remote deploy command detected in workflow.' >&2
+          set -euo pipefail
+          hits="$(grep -RInE 'wrangler +deploy' .github/workflows | grep -v -- '--dry-run' || true)"
+          test -z "$hits" && exit 0
+          echo "$hits"
+          unexpected="$(printf '%s\n' "$hits" | grep -v '^\.github/workflows/order010-deploy\.yml:' || true)"
+          if test -n "$unexpected"; then
+            echo 'Remote deploy command detected outside the audited ORDER010 terminal workflow.' >&2
             exit 1
           fi
+          test -f .github/workflows/order010-deploy.yml || { echo 'Deploy reference exists without audited workflow.' >&2; exit 1; }
+          grep -q 'AUD_COMMENT_ID: 5214873711' .github/workflows/order010-deploy.yml
+          grep -q 'USD_BUDGET: "0"' .github/workflows/order010-deploy.yml
+          grep -q 'PAYMENT_DATA: "NO"' .github/workflows/order010-deploy.yml
+          grep -q 'RF_TX: "NO"' .github/workflows/order010-deploy.yml
+          grep -q 'MAIN_MERGE: "NO"' .github/workflows/order010-deploy.yml
       - name: License inventory
         run: node scripts/inventory.mjs
       - uses: actions/upload-artifact@v4
