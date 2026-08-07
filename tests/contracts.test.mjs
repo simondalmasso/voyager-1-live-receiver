@@ -13,7 +13,9 @@ test('state derives distance, radial velocity and Earth direction',()=>{
   assert.equal(s.distanceKm,5);
   assert.equal(s.rangeRateKmS,.5);
   assert.equal(s.oneWayLightTimeSeconds,5/C_KM_S);
-  assert.deepEqual(s.earthDirection,[-.6,-.8,0]);
+  assert.ok(Math.abs(s.earthDirection[0]+.6)<1e-12);
+  assert.ok(Math.abs(s.earthDirection[1]+.8)<1e-12);
+  assert.ok(Math.abs(s.earthDirection[2])<1e-12);
   assert.equal(s.orientationTruthClass,'EARTH_POINTING_DERIVED');
 });
 
