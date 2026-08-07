@@ -1,0 +1,61 @@
+name: ORDER010 Production Probe
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['.github/workflows/order010-production-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PRODUCTION_URL: https://voyager-1-live-receiver.simondalmasso44.workers.dev
+      DEPLOYED_SHA: 9874f5634296fbd55d8a7c20618a35b18ce4fda6
+      CLOUDFLARE_VERSION_ID: e372adfe-451c-479a-9445-d4b2e227b92d
+    steps:
+      - name: Capture and enforce settled production state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/order010-production-probe
+          for path in / /api/v1/health /api/v1/sources /api/v1/voyager/state /api/v1/voyager/trajectory /api/v1/receiver/snapshot /manifest.webmanifest /assets/voyager-probe-a.glb; do
+            safe="$(printf '%s' "$path" | sed 's#^/##;s#[^A-Za-z0-9._-]#_#g')"; test -n "$safe" || safe=root
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --connect-timeout 8 --max-time 25 -D "artifacts/order010-production-probe/${safe}.headers" -o "artifacts/order010-production-probe/${safe}.body" "$PRODUCTION_URL$path"
+          done
+          jq -e --arg sha "$DEPLOYED_SHA" '.status=="ok" and .worker=="healthy" and .buildSha==$sha and .spiceTrajectory=="crosschecked" and .receiverHub=="sqlite-durable-object" and .costProfile=="USD_0_FREE_PLAN"' artifacts/order010-production-probe/api_v1_health.body >/dev/null && echo HEALTH=PASS
+          jq -e '.crosscheck.pass==true and (.samples|length)>=400' artifacts/order010-production-probe/api_v1_voyager_trajectory.body >/dev/null && echo TRAJECTORY=PASS
+          jq -e '.sourceMode=="NO_SOURCE" or .sourceMode=="LOST"' artifacts/order010-production-probe/api_v1_receiver_snapshot.body >/dev/null && echo RECEIVER_STATE=PASS
+          grep -q 'VOYAGER LINK' artifacts/order010-production-probe/root.body && echo ROOT=PASS
+          echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  artifacts/order010-production-probe/assets_voyager-probe-a.glb.body' | sha256sum -c -
+          for hdr in root api_v1_health; do
+            grep -qi '^x-content-type-options: nosniff' "artifacts/order010-production-probe/${hdr}.headers"
+            grep -qi '^content-security-policy:' "artifacts/order010-production-probe/${hdr}.headers"
+          done
+          grep -qi '^strict-transport-security:' artifacts/order010-production-probe/root.headers
+          echo ROOT_SECURITY_HEADERS=PASS
+          echo API_SECURITY_HEADERS=PASS
+          status="$(curl --silent --show-error -o artifacts/order010-production-probe/unsigned-ingest.json -w '%{http_code}' -H 'content-type: application/json' --data '{"schemaVersion":1,"stationId":"unknown","sequence":1,"nonce":"nonce-123456789","softwareSha":"abcdef1","observedAt":"2026-08-07T12:00:00Z","band":{"centerFrequencyHz":8420430000},"snapshot":{}}' "$PRODUCTION_URL/api/v1/receiver/ingest")"
+          test "$status" = 403
+          jq -e '.error.code=="STATION_UNREGISTERED"' artifacts/order010-production-probe/unsigned-ingest.json >/dev/null && echo UNSIGNED_INGEST=PASS
+      - name: Verify ReceiverHub websocket
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRODUCTION_URL="$PRODUCTION_URL" node --input-type=module <<'NODE'
+          const u=new URL(process.env.PRODUCTION_URL);u.protocol='wss:';u.pathname='/api/v1/receiver/live';
+          await new Promise((resolve,reject)=>{const ws=new WebSocket(u);const t=setTimeout(()=>reject(new Error('ws timeout')),12000);ws.onmessage=e=>{const data=JSON.parse(String(e.data));if(!['NO_SOURCE','LOST'].includes(data.sourceMode))return reject(new Error(`unexpected ${data.sourceMode}`));clearTimeout(t);ws.close();resolve()};ws.onerror=()=>reject(new Error('ws error'))});
+          console.log('RECEIVER_HUB_WEBSOCKET=PASS');
+          NODE
+      - name: Record settled production checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --arg sha "$DEPLOYED_SHA" --arg version "$CLOUDFLARE_VERSION_ID" --arg url "$PRODUCTION_URL" --arg run "$GITHUB_RUN_ID" '{schemaVersion:1,status:"PRODUCTION_PROBE_PASS",deployedSha:$sha,cloudflareVersionId:$version,productionUrl:$url,runId:$run,rootSecurityHeaders:"PASS",apiSecurityHeaders:"PASS",receiverHubWebSocket:"PASS",costUsd:0,paymentData:"NO",rfTx:"NO",mainMerge:"NO",verifiedAt:(now|todateiso8601)}' > artifacts/order010-production-probe/checkpoint.json
+          cat artifacts/order010-production-probe/checkpoint.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: order010-production-probe-final
+          path: artifacts/order010-production-probe
+          retention-days: 30

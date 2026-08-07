@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "voyager-listener"
+version = "1.0.0"
+description = "Receive-only SigMF and synthetic narrowband carrier detector"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [{name = "Simon Dalmasso"}]
+dependencies = []
+[project.optional-dependencies]
+fast = ["numpy>=2.2", "scipy>=1.15"]
+astronomy = ["astropy>=7", "astroquery>=0.4.9"]
+hardware = ["SoapySDR>=0.8"]
+dev = ["pytest>=8", "coverage>=7", "ruff>=0.11", "mypy>=1.15"]
+[project.scripts]
+voyager-listener = "voyager_listener.cli:main"
+[tool.setuptools.packages.find]
+where = ["src"]
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+[tool.mypy]
+python_version = "3.12"
+strict = true

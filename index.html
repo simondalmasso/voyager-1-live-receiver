@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#05070b" />
+  <meta name="description" content="Voyager Link — immersive Voyager 1 mission and verified receive-only signal laboratory." />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self'; img-src 'self' data: https://i.ytimg.com; connect-src 'self' http://127.0.0.1:8765 ws://127.0.0.1:8765 https://www.youtube.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; font-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'" />
+  <title>Voyager Link</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/order010.css" />
+</head>
+<body>
+  <a class="skip-link" href="#primary-controls">Skip to controls</a>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">◉</span><div><strong>VOYAGER LINK</strong><small>VOYAGER 1 · VERIFIED RECEIVE-ONLY LAB</small></div></div>
+      <div class="top-status" aria-live="polite"><span id="truth-pill" class="truth-pill stale">STALE</span><span id="freshness">Loading source state…</span></div>
+      <button id="help-button" class="icon-button" type="button" aria-controls="help-panel" aria-expanded="false">?</button>
+    </header>
+    <main>
+      <section class="scene-region" aria-label="Interactive three-dimensional representation of Voyager 1 and mission context">
+        <canvas id="space-canvas" aria-label="3D Voyager 1 scene. Use drag to orbit, wheel or pinch to zoom, and R to recenter."></canvas>
+        <div id="webgl-fallback" class="webgl-fallback" hidden><svg viewBox="0 0 800 450" role="img" aria-labelledby="fallback-title fallback-desc"><title id="fallback-title">Voyager 1 two-dimensional fallback</title><desc id="fallback-desc">A stylized spacecraft points its high-gain antenna toward the derived Earth direction.</desc><defs><radialGradient id="dish"><stop offset="0" stop-color="#f4d89b"/><stop offset="1" stop-color="#6c5a38"/></radialGradient></defs><circle cx="400" cy="225" r="108" fill="url(#dish)" stroke="#d6a84f" stroke-width="3"/><circle cx="400" cy="225" r="14" fill="#090b11"/><rect x="375" y="320" width="50" height="48" rx="8" fill="#aa8641"/><line x1="400" y1="225" x2="690" y2="95" stroke="#65c9ff" stroke-dasharray="8 12"/><text x="695" y="95" fill="#b7e7ff">EARTH VECTOR</text></svg><p>WebGL is unavailable. Mission data and receiver controls remain accessible.</p></div>
+        <div class="scene-vignette" aria-hidden="true"></div>
+        <div class="scene-meta"><span class="camera-label" id="camera-label">HERO THREE-QUARTER</span><button id="model-label" class="model-label truth-open" data-truth="model">MODEL · LOADING NASA GLB</button></div>
+        <button id="recenter" class="recenter" type="button">Recenter <kbd>R</kbd></button>
+        <button id="pause-motion" class="pause-motion" type="button" aria-pressed="false">Pause visual motion <kbd>Space</kbd></button>
+        <div class="gesture-tip" id="gesture-tip">Drag to orbit · Pinch/wheel to zoom</div>
+      </section>
+      <aside class="telemetry-rail" aria-label="Mission telemetry summary"><article class="metric"><span>DISTANCE TO EARTH</span><strong id="distance">—</strong><button class="truth-open" data-truth="distance" aria-label="Show provenance for distance">source</button></article><article class="metric"><span>ONE-WAY LIGHT TIME</span><strong id="light-time">—</strong><button class="truth-open" data-truth="lightTime" aria-label="Show provenance for light time">source</button></article><article class="metric"><span>RADIAL VELOCITY</span><strong id="range-rate">—</strong><button class="truth-open" data-truth="rangeRate" aria-label="Show provenance for radial velocity">source</button></article><article class="metric"><span>RECEIVER</span><strong id="receiver-state">NO SOURCE</strong><button class="truth-open" data-truth="signal" aria-label="Show provenance for receiver state">source</button></article></aside>
+      <section class="album-dock" aria-label="Optional background music player"><div><span>MUSIC · GAS 0095</span><strong id="album-status">TRACK 3 · MICROSCOPIC</strong></div><div class="album-actions"><button id="album-play" type="button">PLAY</button><button id="album-mute" type="button">MUTE</button></div><div id="youtube-player" class="youtube-player" aria-hidden="true"></div></section>
+      <section id="primary-controls" class="control-deck" tabindex="-1"><nav class="mode-tabs" aria-label="Experience modes"><button data-mode="flight" class="active" aria-pressed="true">FLIGHT <kbd>1</kbd></button><button data-mode="context" aria-pressed="false">CONTEXT <kbd>2</kbd></button><button data-mode="signal" aria-pressed="false">SIGNAL <kbd>3</kbd></button><button data-mode="science" aria-pressed="false">SCIENCE <kbd>4</kbd></button><button data-mode="mission" aria-pressed="false">MISSION <kbd>5</kbd></button></nav><div class="mode-copy"><p id="mode-kicker">INTERSTELLAR FLIGHT</p><h1 id="mode-title">Beside the farthest human-made object</h1><p id="mode-description">Visual motion is accelerated and stylized. Spacecraft geometry is sourced through JPL Horizons and every claim is labeled by provenance.</p></div><div class="guided-actions"><button data-preset="earth">LOOK BACK HOME</button><button data-preset="corridor">LIGHT-TIME CORRIDOR</button><button data-preset="overview">TRAJECTORY OVERVIEW</button><button id="open-truth">TRUTH LAYER</button></div></section>
+      <section id="signal-panel" class="signal-panel" hidden aria-labelledby="signal-heading"><div class="signal-header"><div><small>SIGNAL SOURCE</small><h2 id="signal-heading">Receive-only carrier laboratory</h2></div><span id="signal-truth" class="truth-pill simulated">SYNTHETIC TEST</span></div><div class="signal-grid"><canvas id="waterfall" width="960" height="260" aria-label="Signal waterfall visualization"></canvas><div class="signal-metrics"><div><span>EXPECTED</span><strong id="expected-frequency">8 420.430 MHz</strong></div><div><span>OBSERVED</span><strong id="observed-frequency">—</strong></div><div><span>DRIFT</span><strong id="drift">—</strong></div><div><span>SNR</span><strong id="snr">—</strong></div><div><span>CONFIDENCE</span><strong id="confidence">—</strong></div><div><span>STATE</span><strong id="detector-state">SEARCHING</strong></div></div></div><div class="source-selector" role="group" aria-label="Receiver source"><button data-source="hub">VERIFIED HUB</button><button data-source="local">LOCAL LISTENER</button><button data-source="recorded">RECORDED</button><button data-source="synthetic" class="active">SYNTHETIC TEST</button><button data-source="none">NO SOURCE</button></div><p id="signal-disclaimer" class="signal-disclaimer">Deterministic generated IQ. This is not a live Voyager reception.</p></section>
+      <dialog id="truth-dialog" class="truth-dialog"><form method="dialog"><button class="dialog-close" aria-label="Close truth layer">×</button></form><p class="eyebrow">PRODUCT TRUTH</p><h2 id="truth-title">Truth layer</h2><div id="truth-content"></div></dialog>
+      <section id="help-panel" class="help-panel" hidden><h2>Controls</h2><p>Drag or use arrow keys to orbit. Wheel, pinch, + and − zoom. R recenters. Space pauses only visual motion. Number keys switch modes.</p><p><strong>Receive-only:</strong> this independent project has no command or RF uplink path and is not affiliated with NASA, JPL, or DSN.</p><p><strong>Music:</strong> the optional YouTube album player is separate from PWS science and radio receiver products.</p></section>
+      <section class="sr-only" aria-live="polite" id="camera-announcer"></section><section class="accessible-scene-summary" aria-label="Text alternative for 3D scene"><h2>Scene status</h2><p id="scene-summary">Voyager 1 is centered. The high-gain antenna is shown with a derived Earth vector. Camera preset: hero three-quarter.</p></section>
+    </main>
+    <footer><span>Independent open-source project · receive-only · no account · USD 0 profile</span><span id="utc-clock"></span></footer>
+  </div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

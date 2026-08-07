@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
+test('sensitive claims have truth context',async()=>{for(const p of ['README.md','index.html','src/app.js']){const s=await readFile(p,'utf8');assert.ok(!/NASA approved|official telemetry|connected to the DSN/i.test(s),`${p} has forbidden claim`)}});
+test('deploy is not present in automatic workflows',async()=>{for(const p of ['.github/workflows/ci.yml','.github/workflows/listener-ci.yml','.github/workflows/security.yml','.github/workflows/data-verify.yml']){const s=await readFile(p,'utf8');assert.ok(!/wrangler\s+deploy(?!\s+--dry-run)/.test(s),`${p} contains deploy`)}});

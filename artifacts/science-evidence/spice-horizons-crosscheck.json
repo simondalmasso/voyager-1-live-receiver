@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-07T08:00:00Z",
+  "frame": "J2000/ICRF",
+  "target": "Voyager 1 (-31)",
+  "trajectoryCenter": "SUN",
+  "crosscheckCenter": "EARTH",
+  "kernelCoverageUtc": {
+    "mergedStart": "1977-09-05T13:58:36.200Z",
+    "mergedEnd": "2030-12-31T23:58:50.816Z",
+    "extendedStart": "1980-12-31T23:59:08.816Z",
+    "extendedEnd": "2099-12-31T23:58:50.816Z"
+  },
+  "spiceKernels": [
+    "Voyager_1.a54206u_V0.2_merged.bsp",
+    "vgr1.x2100.bsp"
+  ],
+  "sampleCount": 473,
+  "adaptiveDensity": {
+    "Jupiter": "6h \u00b120d",
+    "Saturn": "6h \u00b125d",
+    "terminationShock": "daily \u00b110d",
+    "heliopause": "daily \u00b110d",
+    "cruise": "annual",
+    "current": "monthly"
+  },
+  "horizonsCrosscheck": {
+    "at": "2026-08-07T08:00:00Z",
+    "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-31%27&OBJ_DATA=NO&MAKE_EPHEM=YES&EPHEM_TYPE=VECTORS&CENTER=%27500%40399%27&START_TIME=%272026-08-07+08%3A00%3A00%27&STOP_TIME=%272026-08-07+08%3A01%3A00%27&STEP_SIZE=%271+m%27&REF_SYSTEM=ICRF&REF_PLANE=FRAME&OUT_UNITS=KM-S&VEC_LABELS=NO&VEC_CORR=NONE&CSV_FORMAT=YES",
+    "positionErrorKm": 2935.1967221568325,
+    "velocityErrorKmS": 0.0003996089101549769,
+    "pass": true
+  },
+  "kernelSha256": {
+    "vgr1.x2100.bsp": "aa8f37673b5ef60296d210566d01cc49f7b32711f37003393c3327616c9fc6d0",
+    "vgr1-merged.bsp": "47c6f2be03668b50a1efb5f96978a2b68b2b501dae6f585841b1569baa3f4311",
+    "de440s.bsp": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2",
+    "naif0012.tls": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b"
+  }
+}

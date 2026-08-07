@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "source": "NASA 3D Resources",
+  "sourceUrl": "https://science.nasa.gov/3d-resources/voyager-probe-a/",
+  "repository": "https://github.com/nasa/NASA-3D-Resources",
+  "sourceCommit": "11ebb4ee043715aefbba6aeec8a61746fad67fa7",
+  "sourceGitBlob": "3126b064d25762796a5fdefca8e430104764070d",
+  "sha256": "7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821",
+  "bytes": 285936,
+  "usagePolicy": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+  "credit": "NASA",
+  "role": "PRIMARY_VISUAL_MODEL",
+  "proceduralFallback": "src/scene.js"
+}

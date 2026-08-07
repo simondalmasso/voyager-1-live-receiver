@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.wrangler/
+.wrangler-dry-run/
+playwright-report/
+test-results/
+coverage/
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+!.dev.vars.example
+*.sigmf-data
+artifacts/generated/
