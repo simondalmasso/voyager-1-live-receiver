@@ -22,16 +22,13 @@
       <div id="webgl-fallback" class="webgl-fallback" hidden><p>WebGL is unavailable. The verified receive-only laboratory remains accessible.</p></div>
     </section>
   </main>
-
   <div class="legacy-bridges" hidden aria-hidden="true">
     <span id="truth-pill" class="truth-pill">DERIVED_GEOMETRY</span><span id="freshness"></span>
     <button id="hud-menu" type="button"></button><button id="hud-lab" type="button"></button><button id="hud-recenter" type="button"></button><button id="hud-fullscreen" type="button"></button><button id="hud-audio" type="button"></button><button id="hud-mute" type="button"></button>
     <span id="hud-truth"></span><button id="recenter" type="button"></button>
     <div id="youtube-player"></div><span id="album-status">TRACK 3 · MICROSCOPIC</span><button id="album-play" type="button">PLAY</button><button id="album-mute" type="button">MUTE</button>
   </div>
-
   <dialog id="truth-dialog" class="truth-dialog"><form method="dialog"><button class="dialog-close" aria-label="Close truth layer">×</button></form><p class="eyebrow">PRODUCT TRUTH</p><h2>Voyager Link truth layer</h2><div><dl><dt>Geometry</dt><dd>JPL Horizons same-epoch vectors · DERIVED_GEOMETRY</dd><dt>Visual scales</dt><dd>TRUE_ORBIT_RELATIVE / PLANETARY_OVERVIEW / VOYAGER_DISTANCE_LOG</dd><dt>Displayed radii</dt><dd>DISPLAY_RADIUS_EXAGGERATED</dd><dt>Orbit curves</dt><dd>ORBIT_APPROXIMATION</dd><dt>RF</dt><dd>Receive-only · no command or uplink path</dd></dl></div></dialog>
-
   <aside id="lab-drawer" class="lab-drawer" hidden aria-labelledby="lab-title">
     <div class="lab-head"><div><p class="eyebrow">LAB → PIPELINE</p><h2 id="lab-title">Deep Space Signal Lab</h2></div><button id="lab-close" class="lab-close" type="button" aria-label="Close lab">×</button></div>
     <section class="lab-section"><h3>Pipeline topology</h3><p id="lab-capabilities">Loading laboratory contract…</p><ol id="lab-pipeline" class="pipeline-list" aria-live="polite"></ol></section>
@@ -39,8 +36,8 @@
     <section class="lab-section"><h3>Next Observation Window</h3><p>Advisory receive-only deep-space geometry; no TLE or rotator control.</p><form id="window-form" class="lab-form"><label>Latitude<input name="lat" type="number" min="-90" max="90" step="0.0001" required></label><label>Longitude<input name="lon" type="number" min="-180" max="180" step="0.0001" required></label><label>Elevation m<input name="elevation" type="number" value="0" step="1"></label><label>Min elevation °<input name="minElevationDeg" type="number" value="10" step="1"></label><label>Carrier Hz<input name="carrierHz" type="number" value="8420430000" step="1"></label><label>Duration min<input name="durationMinutes" type="number" value="180" step="15"></label><button type="submit">Generate window</button></form><p id="window-output" aria-live="polite">No station coordinates submitted.</p></section>
     <section class="lab-section"><h3>Evidence</h3><p>Downloads reduced scientific products with SHA-256. Raw IQ remains local.</p><button id="evidence-download" class="evidence-button" type="button">Download evidence</button><p id="evidence-status" aria-live="polite">Requires an available receiver product.</p></section>
   </aside>
-
   <script type="module" src="/order013.js"></script>
+  <script type="module" src="/order013-trajectory.js"></script>
   <script type="module" src="/order011.js"></script>
 </body>
 </html>
