@@ -1,0 +1,86 @@
+name: ORDER010 SPICE Trajectory
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['.github/workflows/order010-spice.yml']
+permissions:
+  contents: write
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Generate trajectory from official NAIF SPKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check 'spiceypy==7.0.0'
+          mkdir -p /tmp/kernels artifacts/science-evidence worker
+          curl -fsSL --proto '=https' --tlsv1.2 'https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp' -o /tmp/kernels/vgr1.x2100.bsp
+          curl -fsSL --proto '=https' --tlsv1.2 'https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp' -o /tmp/kernels/de440s.bsp
+          curl -fsSL --proto '=https' --tlsv1.2 'https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls' -o /tmp/kernels/naif0012.tls
+          sha256sum /tmp/kernels/*
+          python - <<'PY'
+          import datetime as dt, hashlib, json, math, pathlib, urllib.parse, urllib.request
+          import spiceypy as sp
+          K=pathlib.Path('/tmp/kernels')
+          for p in [K/'naif0012.tls',K/'de440s.bsp',K/'vgr1.x2100.bsp']: sp.furnsh(str(p))
+          UTC=dt.timezone.utc
+          def dates():
+              out={dt.datetime(1977,9,5,tzinfo=UTC)}
+              # Annual cruise backbone.
+              for y in range(1978,2027): out.add(dt.datetime(y,1,1,tzinfo=UTC))
+              # Adaptive encounter density.
+              for center,days,step_h in [(dt.datetime(1979,3,5,tzinfo=UTC),20,6),(dt.datetime(1980,11,12,tzinfo=UTC),25,6),(dt.datetime(2004,12,16,tzinfo=UTC),10,24),(dt.datetime(2012,8,25,tzinfo=UTC),10,24)]:
+                  h=-days*24
+                  while h<=days*24: out.add(center+dt.timedelta(hours=h));h+=step_h
+              # Current-period monthly context.
+              cur=dt.datetime(2025,1,1,tzinfo=UTC)
+              while cur<=dt.datetime(2026,8,7,tzinfo=UTC): out.add(cur);cur=(cur.replace(day=28)+dt.timedelta(days=4)).replace(day=1)
+              out.add(dt.datetime(2026,8,7,8,0,0,tzinfo=UTC))
+              return sorted(out)
+          samples=[]
+          for t in dates():
+              et=sp.str2et(t.strftime('%Y-%m-%dT%H:%M:%S'))
+              st,_=sp.spkezr('-31',et,'J2000','NONE','SUN')
+              samples.append([t.isoformat().replace('+00:00','Z'),*map(lambda x:round(float(x),6),st[:3])])
+          at=dt.datetime(2026,8,7,8,0,0,tzinfo=UTC);et=sp.str2et(at.strftime('%Y-%m-%dT%H:%M:%S'))
+          earth_state,_=sp.spkezr('-31',et,'J2000','NONE','EARTH')
+          stop=at+dt.timedelta(minutes=1)
+          q=urllib.parse.urlencode({'format':'text','COMMAND':"'-31'",'OBJ_DATA':'NO','MAKE_EPHEM':'YES','EPHEM_TYPE':'VECTORS','CENTER':"'500@399'",'START_TIME':"'2026-08-07 08:00:00'",'STOP_TIME':"'2026-08-07 08:01:00'",'STEP_SIZE':"'1 m'",'REF_SYSTEM':'ICRF','REF_PLANE':'FRAME','OUT_UNITS':'KM-S','VEC_LABELS':'NO','VEC_CORR':'NONE','CSV_FORMAT':'YES'})
+          url='https://ssd.jpl.nasa.gov/api/horizons.api?'+q
+          txt=urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'voyager-link-order010'}),timeout=20).read().decode()
+          block=txt.split('$$SOE',1)[1].split('$$EOE',1)[0]
+          hv=None
+          for line in block.splitlines():
+              f=[x.strip() for x in line.split(',')];nums=[]
+              for x in f:
+                  try: nums.append(float(x))
+                  except: nums.append(None)
+              for i in range(2,len(nums)-5):
+                  if all(v is not None for v in nums[i:i+6]): hv=nums[i:i+6];break
+              if hv:break
+          assert hv, 'Horizons vector parse failed'
+          pos_err=math.sqrt(sum((earth_state[i]-hv[i])**2 for i in range(3)))
+          vel_err=math.sqrt(sum((earth_state[i+3]-hv[i+3])**2 for i in range(3)))
+          evidence={'schemaVersion':1,'generatedAt':'2026-08-07T08:00:00Z','frame':'J2000/ICRF','target':'Voyager 1 (-31)','trajectoryCenter':'SUN','crosscheckCenter':'EARTH','spiceKernel':'https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp','planetKernel':'de440s.bsp','sampleCount':len(samples),'adaptiveDensity':{'Jupiter':'6h ±20d','Saturn':'6h ±25d','terminationShock':'daily ±10d','heliopause':'daily ±10d','cruise':'annual','current':'monthly'},'horizonsCrosscheck':{'at':'2026-08-07T08:00:00Z','sourceUrl':url,'positionErrorKm':pos_err,'velocityErrorKmS':vel_err,'pass':pos_err<10000 and vel_err<0.05},'kernelSha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in K.iterdir()}}
+          assert evidence['horizonsCrosscheck']['pass'], evidence['horizonsCrosscheck']
+          traj={'schemaVersion':1,'frame':'J2000_ICRF_HELIOCENTRIC','units':{'position':'km'},'generatedAt':evidence['generatedAt'],'samples':samples,'provenance':{'truthClass':'DERIVED_GEOMETRY','sourceId':'naif-voyager-spice','sourceUrl':evidence['spiceKernel'],'fetchedAt':evidence['generatedAt'],'transform':'SPICE spkezr Voyager 1 relative SUN; adaptive mission-time sampling; cross-checked against JPL Horizons Earth-relative vector.'},'crosscheck':evidence['horizonsCrosscheck']}
+          pathlib.Path('artifacts/science-evidence/spice-horizons-crosscheck.json').write_text(json.dumps(evidence,indent=2)+'\n')
+          pathlib.Path('worker/trajectory.generated.js').write_text('export const SPICE_TRAJECTORY='+json.dumps(traj,separators=(',',':'))+';\n')
+          print(json.dumps(evidence,indent=2))
+          sp.kclear()
+          PY
+      - name: Commit generated scientific artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'order010-arq'
+          git config user.email 'actions@users.noreply.github.com'
+          git add worker/trajectory.generated.js artifacts/science-evidence/spice-horizons-crosscheck.json
+          git commit -m 'data(order010): add SPICE trajectory and Horizons cross-check'
+          git push origin HEAD:feat/aud-001-complete-product
