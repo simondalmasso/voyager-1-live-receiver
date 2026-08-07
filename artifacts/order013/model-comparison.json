@@ -1,0 +1,92 @@
+{
+  "schema": "ORDER013_MODEL_COMPARISON_V1",
+  "policy": "CONTROLLED_GLTF_STRUCTURE_DETAIL_VS_BYTES",
+  "selectedHeroHigh": "PROBE_B",
+  "heroLow": "PROBE_A",
+  "proceduralFallback": "EMERGENCY_ONLY_TRUTH_LABELED",
+  "candidates": [
+    {
+      "candidate": "PROBE_A",
+      "file": "assets/voyager-probe-a.glb",
+      "source": "https://science.nasa.gov/3d-resources/voyager-probe-a/",
+      "bytes": 285936,
+      "sha256": "7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821",
+      "nodes": 2,
+      "meshes": 1,
+      "primitives": 16,
+      "triangles": 29911,
+      "materials": 16,
+      "textures": 0,
+      "images": 0,
+      "extensionsUsed": [
+        "KHR_draco_mesh_compression"
+      ],
+      "extensionsRequired": [
+        "KHR_draco_mesh_compression"
+      ],
+      "bounds": {
+        "min": [
+          -0.04999999701976776,
+          -0.04977565258741379,
+          -0.10350000113248825
+        ],
+        "max": [
+          0.04999999701976776,
+          0.1594526767730713,
+          0.23314964771270752
+        ],
+        "size": [
+          0.09999999403953552,
+          0.20922832936048508,
+          0.33664964884519577
+        ]
+      },
+      "detailPerKiBScore": 335.679
+    },
+    {
+      "candidate": "PROBE_B",
+      "file": "assets/voyager-probe-b.glb",
+      "source": "https://science.nasa.gov/3d-resources/voyager-probe-b/",
+      "bytes": 1720864,
+      "sha256": "bd86ded828dd3f459293aee4ffc3cd0998d8db67439317c8299650a1174c3289",
+      "nodes": 4,
+      "meshes": 4,
+      "primitives": 4,
+      "triangles": 20390,
+      "materials": 3,
+      "textures": 3,
+      "images": 4,
+      "extensionsUsed": [
+        "KHR_draco_mesh_compression",
+        "EXT_texture_webp"
+      ],
+      "extensionsRequired": [
+        "KHR_draco_mesh_compression"
+      ],
+      "bounds": {
+        "min": [
+          -7.999389171600342,
+          -6.841893196105957,
+          -8.6850004196167
+        ],
+        "max": [
+          7.998589038848877,
+          15.935519218444824,
+          26.20960807800293
+        ],
+        "size": [
+          15.997978210449219,
+          22.77741241455078,
+          34.89460849761963
+        ]
+      },
+      "detailPerKiBScore": 37.738
+    },
+    {
+      "candidate": "VTAD",
+      "source": "https://science.nasa.gov/resource/voyager-3d-model/",
+      "availability": "SOURCE_PAGE_VERIFIED_DIRECT_BINARY_NOT_PINNED",
+      "selected": false
+    }
+  ]
+}
