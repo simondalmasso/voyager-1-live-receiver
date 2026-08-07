@@ -9,5 +9,6 @@
   "paymentData": "NO",
   "rfTx": "NO",
   "mainMerge": "NO",
-  "requestedAt": "2026-08-07T14:54:00Z"
+  "attempt": 3,
+  "requestedAt": "2026-08-07T15:05:00Z"
 }
