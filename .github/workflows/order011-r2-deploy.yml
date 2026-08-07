@@ -1,0 +1,234 @@
+name: ORDER011 R2 Terminal Deploy
+on:
+  push:
+    branches: [feat/order-011-deep-space-lab]
+    paths: ['ops/order011-r2-deploy-request.json']
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  deployments: write
+env:
+  AUD_COMMENT_ID: '5219306424'
+  R1_PRODUCTION_SHA: 3ab7a0e9d26ec9a9bcd17002ec2b83bebf0b8cde
+  R1_CLOUDFLARE_VERSION: c5347959-18db-4411-8ecd-33be76c9ad64
+  PRODUCTION_URL: https://voyager-1-live-receiver.simondalmasso44.workers.dev
+  USD_BUDGET: '0'
+  PAYMENT_DATA: 'NO'
+  RF_TX: 'NO'
+  MAIN_MERGE: 'NO'
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: R2 authority and immutable safety guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$AUD_COMMENT_ID" = '5219306424'
+          test "$R1_PRODUCTION_SHA" = '3ab7a0e9d26ec9a9bcd17002ec2b83bebf0b8cde'
+          test "$R1_CLOUDFLARE_VERSION" = 'c5347959-18db-4411-8ecd-33be76c9ad64'
+          test "$USD_BUDGET" = '0' && test "$PAYMENT_DATA" = 'NO' && test "$RF_TX" = 'NO' && test "$MAIN_MERGE" = 'NO'
+          test -n "${CLOUDFLARE_API_TOKEN:-}" && test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+          jq -e '.action == "EXECUTE_ORDER_011_R2_END_TO_END" and .audCommentId == 5219306424 and .baselineProductionSha == "3ab7a0e9d26ec9a9bcd17002ec2b83bebf0b8cde" and .rollbackVersion == "c5347959-18db-4411-8ecd-33be76c9ad64" and .preserveFullscreenBaseline == true and .usdBudget == 0 and .paymentData == "NO" and .rfTx == "NO" and .mainMerge == "NO"' ops/order011-r2-deploy-request.json >/dev/null
+          git merge-base --is-ancestor "$R1_PRODUCTION_SHA" "$GITHUB_SHA"
+          echo 'ORDER_011_R2_AUTHORITY=PASS'
+      - name: Verify Cloudflare identity and accepted R1 production baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/order011-r2/predeploy
+          npx --yes wrangler@4.114.0 whoami > artifacts/order011-r2/predeploy/whoami.txt
+          npx --yes wrangler@4.114.0 deployments list --json > artifacts/order011-r2/predeploy/cloudflare-deployments.json
+          printf '%s\n' "$R1_CLOUDFLARE_VERSION" > artifacts/order011-r2/predeploy/rollback-version-id.txt
+          streak=0
+          for i in $(seq 1 60); do
+            if curl --fail --silent --show-error --connect-timeout 5 --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v1/health?r2pre=$i-$RANDOM" -o artifacts/order011-r2/predeploy/health.json && jq -e --arg baseline "$R1_PRODUCTION_SHA" '.status=="ok" and .buildSha==$baseline' artifacts/order011-r2/predeploy/health.json >/dev/null; then streak=$((streak+1)); else streak=0; fi
+            if test "$streak" -ge 3; then break; fi
+            sleep 2
+          done
+          test "$streak" -ge 3
+          echo 'R1_FULLSCREEN_BASELINE_STABLE=PASS'
+      - name: Install exact dependencies
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          python -m pip install -e ./listener-agent
+      - name: R2 science plus full ORDER010 ORDER011 regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/order011-r2
+          npm test
+          npm run lint
+          npm run format:check
+          npm run verify:data
+          npm run inventory
+          npm run build
+          npm run bundle:report
+          python -m unittest discover -s listener-agent/tests -v
+          voyager-listener doctor | tee artifacts/order011-r2/listener-doctor.json
+          voyager-science verify-geometry | tee artifacts/order011-r2/geometry-check.json
+          python scripts/order011-r2-horizons-check.py | tee artifacts/order011-r2/horizons-observer-crosscheck.log
+          voyager-science evidence-fixture --output artifacts/order011-r2/evidence.zip --verify | tee artifacts/order011-r2/evidence-verify.json
+          test -s dist/assets/voyager-probe-a.glb
+          echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  dist/assets/voyager-probe-a.glb' | sha256sum -c -
+      - name: Fullscreen browser accessibility and visual regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false @playwright/test@1.62.0 @axe-core/playwright@4.12.1
+          npx playwright install --with-deps chromium webkit
+          npm run test:e2e
+      - name: Retain Wrangler dry-run artifact and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/order011-r2/wrangler-dry-run
+          npx --yes wrangler@4.114.0 deploy --dry-run --outdir artifacts/order011-r2/wrangler-dry-run | tee artifacts/order011-r2/wrangler-dry-run.log
+          find artifacts/order011-r2/wrangler-dry-run -type f -print0 | sort -z | xargs -0 sha256sum > artifacts/order011-r2/wrangler-dry-run.sha256
+          test -s artifacts/order011-r2/wrangler-dry-run.sha256
+          echo 'WRANGLER_DRYRUN_ARTIFACT=PASS'
+      - name: Require exact-SHA CodeQL with zero annotations
+        env: { GH_TOKEN: "${{ github.token }}" }
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            checks="$(curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")"
+            count="$(printf '%s' "$checks" | jq '[.check_runs[]|select(.name=="CodeQL")]|length')"
+            pending="$(printf '%s' "$checks" | jq '[.check_runs[]|select(.name=="CodeQL" and .status!="completed")]|length')"
+            bad="$(printf '%s' "$checks" | jq '[.check_runs[]|select(.name=="CodeQL" and (.conclusion!="success" and .conclusion!="neutral" and .conclusion!="skipped"))]|length')"
+            annotations="$(printf '%s' "$checks" | jq '[.check_runs[]|select(.name=="CodeQL")|.output.annotations_count // 0]|add // 0')"
+            echo "CODEQL count=$count pending=$pending bad=$bad annotations=$annotations"
+            test "$bad" = 0 || exit 33
+            if test "$count" -gt 0 && test "$pending" = 0 && test "$annotations" = 0; then exit 0; fi
+            sleep 5
+          done
+          exit 34
+      - name: Deploy exact R2 audited SHA
+        id: cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.114.0 deploy --var "BUILD_SHA:$GITHUB_SHA" 2>&1 | tee artifacts/order011-r2/cloudflare-deploy.txt
+          version="$(grep -Eio 'Version ID:?[[:space:]]*[0-9a-f-]{20,}' artifacts/order011-r2/cloudflare-deploy.txt | tail -1 | grep -Eo '[0-9a-f-]{20,}' || true)"
+          echo "version_id=$version" >> "$GITHUB_OUTPUT"
+          echo "DEPLOYED_SHA=$GITHUB_SHA"
+          echo "CLOUDFLARE_VERSION_ID=${version:-UNPARSED}"
+      - name: R2 production science truth and API verification
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/order011-r2/production
+          streak=0
+          for i in $(seq 1 90); do
+            probe="$i-$RANDOM"; health_ok=0; caps_ok=0
+            if curl --fail --silent --show-error --connect-timeout 5 --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v1/health?r2=$probe" -o artifacts/order011-r2/production/health.json && jq -e --arg sha "$GITHUB_SHA" '.status=="ok" and .buildSha==$sha and .costProfile=="USD_0_FREE_PLAN"' artifacts/order011-r2/production/health.json >/dev/null; then health_ok=1; fi
+            if curl --fail --silent --show-error --connect-timeout 5 --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v2/lab/capabilities?r2=$probe" -o artifacts/order011-r2/production/capabilities.json && jq -e '.schemaVersion==2 and .canonicalIQBus.rawIqToCloud==false and .liveReplayParity==true and .spectrometer.wolaTaps==4 and .spectrometer.statefulBounds==true and .evidence.browserGeneratesParallelFormat==false and .receiveOnly==true and .costProfile=="USD_0"' artifacts/order011-r2/production/capabilities.json >/dev/null; then caps_ok=1; fi
+            if test "$health_ok" = 1 && test "$caps_ok" = 1; then streak=$((streak+1)); else streak=0; fi
+            echo "R2_EDGE_CONVERGENCE attempt=$i health=$health_ok capabilities=$caps_ok streak=$streak"
+            if test "$streak" -ge 3; then break; fi
+            sleep 2
+          done
+          test "$streak" -ge 3
+          pipeline_ok=0
+          for i in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v2/lab/pipeline?probe=$i-$RANDOM" -o artifacts/order011-r2/production/pipeline.json && jq -e '.schemaVersion==2 and .rawIqCloud==false and .receiveOnly==true and (.stages|map(.id)|index("CANONICAL_IQ_BUS"))!=null' artifacts/order011-r2/production/pipeline.json >/dev/null; then pipeline_ok=1;break;fi;sleep 2
+          done
+          test "$pipeline_ok" = 1
+          evidence_ok=0
+          for i in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v2/lab/evidence?probe=$i-$RANDOM" -o artifacts/order011-r2/production/evidence-status.json && jq -e '.status=="NOT_READY" and (.missing|index("listenerEvidenceManifest"))!=null' artifacts/order011-r2/production/evidence-status.json >/dev/null; then evidence_ok=1;break;fi;sleep 2
+          done
+          test "$evidence_ok" = 1
+          station_ok=0
+          for i in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v2/station/physics?antennaDiameterM=20&apertureEfficiency=.6&systemTemperatureK=50&bandwidthHz=1&integrationSeconds=100&frequencyHz=8420000000&polarization=dual&calibrated=true&probe=$i-$RANDOM" -o artifacts/order011-r2/production/station.json && jq -e '.classification=="STATION_MODEL_CALIBRATED" and .receiveOnly==true' artifacts/order011-r2/production/station.json >/dev/null; then station_ok=1;break;fi;sleep 2
+          done
+          test "$station_ok" = 1
+          window_ok=0
+          for i in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v2/observation-window?lat=-31.4&lon=-64.2&elevation=500&minElevationDeg=-90&durationMinutes=30&stepMinutes=15&probe=$i-$RANDOM" -o artifacts/order011-r2/production/window.json && jq -e '.schemaVersion==2 and .predictionFreshness=="HORIZONS_OBSERVER_FRESH" and .freshness.status=="FRESH" and .rfPredictionReady==true and .carrierRegionHz!=null and (.predictions|length)==3 and ([.predictions[]|select(.rangeRateSource=="JPL_HORIZONS_OBSERVER" and (.expectedCarrierHz|type)=="number")]|length)==3' artifacts/order011-r2/production/window.json >/dev/null; then window_ok=1;break;fi;sleep 3
+          done
+          test "$window_ok" = 1
+          root_ok=0
+          for i in $(seq 1 20); do
+            if curl --fail --silent --show-error -H 'Cache-Control: no-cache' -D artifacts/order011-r2/production/headers.txt "$PRODUCTION_URL/?probe=$i-$RANDOM" -o artifacts/order011-r2/production/index.html && grep -q 'VOYAGER LINK' artifacts/order011-r2/production/index.html && grep -q 'micro-hud' artifacts/order011-r2/production/index.html && grep -qi '^x-content-type-options: nosniff' artifacts/order011-r2/production/headers.txt && grep -qi '^content-security-policy:' artifacts/order011-r2/production/headers.txt; then root_ok=1;break;fi;sleep 2
+          done
+          test "$root_ok" = 1
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/assets/voyager-probe-a.glb?probe=$RANDOM" -o artifacts/order011-r2/production/model.glb
+          echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  artifacts/order011-r2/production/model.glb' | sha256sum -c -
+          echo 'ORDER011_R2_PRODUCTION_SCIENCE=PASS'
+      - name: R2 production fullscreen regression matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRODUCTION_URL="$PRODUCTION_URL" node --input-type=module <<'NODE'
+          import {chromium} from '@playwright/test';
+          const browser=await chromium.launch({headless:true});
+          const sizes=[[360,800],[390,844],[412,915],[844,390],[1280,720],[1440,900]];
+          for(const [width,height] of sizes){
+            const page=await browser.newPage({viewport:{width,height}});let ready=false;
+            for(let attempt=0;attempt<15;attempt++){
+              await page.goto(`${process.env.PRODUCTION_URL}/?order011r2=${Date.now()}-${attempt}`,{waitUntil:'networkidle'});
+              if(await page.locator('#hud-lab').count()){ready=true;break}
+              await page.waitForTimeout(2000);
+            }
+            if(!ready)throw new Error(`R2 shell not converged ${width}x${height}`);
+            await page.waitForFunction(()=>{const el=document.querySelector('#freshness');return el&&!/Loading source state/i.test(el.textContent||'')},{timeout:30000});
+            if((await page.locator('#primary-controls').isVisible())||(await page.locator('#lab-drawer').isVisible())||(await page.locator('#signal-panel').isVisible()))throw new Error(`initial disclosure open ${width}x${height}`);
+            const ratio=await page.evaluate(()=>{const n=[...document.querySelectorAll('.micro-brand,.micro-truth,.micro-controls button')].filter(x=>getComputedStyle(x).display!=='none');return n.reduce((s,x)=>{const r=x.getBoundingClientRect();return s+r.width*r.height},0)/(innerWidth*innerHeight)});if(!(ratio<.1))throw new Error(`persistent UI ratio ${ratio}`);
+            const canvas=page.locator('#space-canvas');if(await canvas.isVisible()){await page.waitForFunction(()=>document.querySelector('#space-canvas')?.dataset.fitValid==='true',{timeout:15000})}else if(!(await page.locator('#webgl-fallback').isVisible()))throw new Error('no scene or fallback');
+            await page.locator('#hud-lab').click();if(!(await page.locator('#lab-drawer').isVisible()))throw new Error('lab disclosure failed');await page.locator('#lab-close').click();
+            await page.screenshot({path:`artifacts/order011-r2/production/${width}x${height}.png`});await page.close();
+          }
+          await browser.close();console.log('ORDER011_R2_FULLSCREEN_REGRESSION=PASS');
+          NODE
+      - name: Write R2 terminal evidence manifest
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          find artifacts/order011-r2 -type f ! -name 'terminal-files.sha256' -print0 | sort -z | xargs -0 sha256sum > artifacts/order011-r2/terminal-files.sha256
+          jq -n --arg sha "$GITHUB_SHA" --arg version '${{ steps.cloudflare.outputs.version_id }}' --arg url "$PRODUCTION_URL" '{status:"DEPLOYED_READY_FOR_AUD_011_R2",headSha:$sha,productionVersion:$version,productionUrl:$url,costIncurredUsd:0,paymentDataUsed:"NO",rfUplink:"NOT_IMPLEMENTED",mainMerge:"NO",auditHandoff:"READY"}' > artifacts/order011-r2/checkpoint.json
+      - name: Roll back automatically on R2 material regression
+        if: failure() && steps.cloudflare.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.114.0 rollback "$R1_CLOUDFLARE_VERSION" --message "ORDER011 R2 automatic rollback after failed production verification"
+          echo "ROLLBACK_EXECUTED=$R1_CLOUDFLARE_VERSION"
+      - name: Create GitHub R2 production deployment record
+        if: success()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployment="$(curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'content-type: application/json' --data "$(jq -nc --arg ref "$GITHUB_SHA" '{ref:$ref,environment:"production",auto_merge:false,required_contexts:[],description:"ORDER011 R2 corrected audited Cloudflare deploy"}')" "https://api.github.com/repos/$GITHUB_REPOSITORY/deployments")"
+          id="$(printf '%s' "$deployment" | jq -r '.id')"
+          curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'content-type: application/json' --data "$(jq -nc --arg url "$PRODUCTION_URL" '{state:"success",environment_url:$url,description:"ORDER011 R2 production verification passed",auto_inactive:true}')" "https://api.github.com/repos/$GITHUB_REPOSITORY/deployments/$id/statuses" > artifacts/order011-r2/github-deployment-status.json
+          printf '%s\n' "$deployment" > artifacts/order011-r2/github-deployment.json
+          echo "GITHUB_DEPLOYMENT_ID=$id"
+      - name: Upload complete R2 terminal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order011-r2-terminal-${{ github.sha }}
+          path: |
+            artifacts/order011-r2
+            playwright-report
+            test-results
+          if-no-files-found: error
+          retention-days: 30
