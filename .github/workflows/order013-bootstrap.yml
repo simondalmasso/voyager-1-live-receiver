@@ -1,0 +1,49 @@
+name: ORDER013 Bootstrap
+on:
+  push:
+    branches: [feat/order-013-nasa-visual-system]
+    paths: [ops/order013-bootstrap-request.json]
+permissions:
+  contents: write
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: feat/order-013-nasa-visual-system, fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Guard branch and baseline
+        run: |
+          test "$GITHUB_REF_NAME" = "feat/order-013-nasa-visual-system"
+          git merge-base --is-ancestor aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD
+      - name: Generate pinned NASA model evidence and same-epoch Horizons geometry
+        run: python scripts/order013-bootstrap.py | tee order013-bootstrap.log
+      - name: Validate products
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          m=json.load(open('artifacts/order013/model-comparison.json'))
+          e=json.load(open('data/order013-ephemeris.json'))
+          assert m['selectedHeroHigh'] in {'PROBE_A','PROBE_B'}
+          assert e['frame']=='ECLIPJ2000' and e['source']=='JPL_HORIZONS'
+          assert set(e['bodies'])=={'Sun','Mercury','Venus','Earth','Mars','Jupiter','Saturn','Uranus','Neptune','Voyager 1'}
+          assert pathlib.Path('assets/voyager-probe-b.glb').stat().st_size > 1000000
+          PY
+      - name: Commit generated canonical products
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add assets/voyager-probe-b.glb assets/voyager-probe-b.provenance.json artifacts/order013/model-comparison.json data/order013-ephemeris.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'data(order013): pin NASA hero model and JPL same-epoch geometry'
+            git push origin HEAD:feat/order-013-nasa-visual-system
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order013-bootstrap-${{ github.sha }}
+          path: |
+            order013-bootstrap.log
+            artifacts/order013/model-comparison.json
+            data/order013-ephemeris.json
+            assets/voyager-probe-b.provenance.json
