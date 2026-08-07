@@ -14,7 +14,7 @@ jobs:
       DEPLOYED_SHA: 7ad9192102f527b3532540e798061d55d95e5473
       CLOUDFLARE_VERSION_ID: 3421cf29-4d5e-414e-9690-b5fd05392c56
     steps:
-      - name: Verify production API, assets and trust boundary
+      - name: Capture production API, assets and trust boundary
         shell: bash
         run: |
           set -euo pipefail
@@ -23,16 +23,22 @@ jobs:
             safe="$(printf '%s' "$path" | sed 's#^/##;s#[^A-Za-z0-9._-]#_#g')"; test -n "$safe" || safe=root
             curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --connect-timeout 8 --max-time 25 -D "artifacts/order010-production-probe/${safe}.headers" -o "artifacts/order010-production-probe/${safe}.body" "$PRODUCTION_URL$path"
           done
-          jq -e --arg sha "$DEPLOYED_SHA" '.status=="ok" and .worker=="healthy" and .buildSha==$sha and .spiceTrajectory=="crosschecked" and .receiverHub=="sqlite-durable-object" and .costProfile=="USD_0_FREE_PLAN"' artifacts/order010-production-probe/api_v1_health.body >/dev/null
-          jq -e '.crosscheck.pass==true and (.samples|length)>=400' artifacts/order010-production-probe/api_v1_voyager_trajectory.body >/dev/null
-          jq -e '.sourceMode=="NO_SOURCE" or .sourceMode=="LOST"' artifacts/order010-production-probe/api_v1_receiver_snapshot.body >/dev/null
-          grep -q 'VOYAGER LINK' artifacts/order010-production-probe/root.body
+          jq -e --arg sha "$DEPLOYED_SHA" '.status=="ok" and .worker=="healthy" and .buildSha==$sha and .spiceTrajectory=="crosschecked" and .receiverHub=="sqlite-durable-object" and .costProfile=="USD_0_FREE_PLAN"' artifacts/order010-production-probe/api_v1_health.body >/dev/null && echo HEALTH=PASS
+          jq -e '.crosscheck.pass==true and (.samples|length)>=400' artifacts/order010-production-probe/api_v1_voyager_trajectory.body >/dev/null && echo TRAJECTORY=PASS
+          jq -e '.sourceMode=="NO_SOURCE" or .sourceMode=="LOST"' artifacts/order010-production-probe/api_v1_receiver_snapshot.body >/dev/null && echo RECEIVER_STATE=PASS
+          grep -q 'VOYAGER LINK' artifacts/order010-production-probe/root.body && echo ROOT=PASS
           echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  artifacts/order010-production-probe/assets_voyager-probe-a.glb.body' | sha256sum -c -
-          grep -qi '^x-content-type-options: nosniff' artifacts/order010-production-probe/root.headers
-          grep -qi '^content-security-policy:' artifacts/order010-production-probe/root.headers
+          echo '--- ROOT HEADERS ---'; cat artifacts/order010-production-probe/root.headers
+          echo '--- API HEADERS ---'; cat artifacts/order010-production-probe/api_v1_health.headers
+          if grep -qi '^x-content-type-options: nosniff' artifacts/order010-production-probe/root.headers; then echo ROOT_NOSNIFF=PASS; else echo ROOT_NOSNIFF=MISSING; fi
+          if grep -qi '^content-security-policy:' artifacts/order010-production-probe/root.headers; then echo ROOT_CSP=PASS; else echo ROOT_CSP=MISSING; fi
+          if grep -qi '^x-content-type-options: nosniff' artifacts/order010-production-probe/api_v1_health.headers; then echo API_NOSNIFF=PASS; else echo API_NOSNIFF=MISSING; fi
+          if grep -qi '^content-security-policy:' artifacts/order010-production-probe/api_v1_health.headers; then echo API_CSP=PASS; else echo API_CSP=MISSING; fi
           status="$(curl --silent --show-error -o artifacts/order010-production-probe/unsigned-ingest.json -w '%{http_code}' -H 'content-type: application/json' --data '{"schemaVersion":1,"stationId":"unknown","sequence":1,"nonce":"nonce-123456789","softwareSha":"abcdef1","observedAt":"2026-08-07T12:00:00Z","band":{"centerFrequencyHz":8420430000},"snapshot":{}}' "$PRODUCTION_URL/api/v1/receiver/ingest")"
+          echo UNSIGNED_INGEST_HTTP=$status
+          cat artifacts/order010-production-probe/unsigned-ingest.json
           test "$status" = 403
-          jq -e '.error.code=="STATION_UNREGISTERED"' artifacts/order010-production-probe/unsigned-ingest.json >/dev/null
+          jq -e '.error.code=="STATION_UNREGISTERED"' artifacts/order010-production-probe/unsigned-ingest.json >/dev/null && echo UNSIGNED_INGEST=PASS
       - name: Verify ReceiverHub websocket
         shell: bash
         run: |
@@ -42,12 +48,16 @@ jobs:
           await new Promise((resolve,reject)=>{const ws=new WebSocket(u);const t=setTimeout(()=>reject(new Error('ws timeout')),12000);ws.onmessage=e=>{const data=JSON.parse(String(e.data));if(!['NO_SOURCE','LOST'].includes(data.sourceMode))return reject(new Error(`unexpected ${data.sourceMode}`));clearTimeout(t);ws.close();resolve()};ws.onerror=()=>reject(new Error('ws error'))});
           console.log('RECEIVER_HUB_WEBSOCKET=PASS');
           NODE
-      - name: Write production probe checkpoint
+      - name: Enforce API security and record static-header state
         shell: bash
         run: |
-          jq -n --arg sha "$DEPLOYED_SHA" --arg version "$CLOUDFLARE_VERSION_ID" --arg url "$PRODUCTION_URL" --arg run "$GITHUB_RUN_ID" '{schemaVersion:1,status:"PRODUCTION_PROBE_PASS",deployedSha:$sha,cloudflareVersionId:$version,productionUrl:$url,runId:$run,costUsd:0,paymentData:"NO",rfTx:"NO",verifiedAt:(now|todateiso8601)}' > artifacts/order010-production-probe/checkpoint.json
+          set -euo pipefail
+          grep -qi '^x-content-type-options: nosniff' artifacts/order010-production-probe/api_v1_health.headers
+          grep -qi '^content-security-policy:' artifacts/order010-production-probe/api_v1_health.headers
+          jq -n --arg sha "$DEPLOYED_SHA" --arg version "$CLOUDFLARE_VERSION_ID" --arg url "$PRODUCTION_URL" --arg run "$GITHUB_RUN_ID" --arg rootNosniff "$(grep -qi '^x-content-type-options: nosniff' artifacts/order010-production-probe/root.headers && echo present || echo missing)" --arg rootCsp "$(grep -qi '^content-security-policy:' artifacts/order010-production-probe/root.headers && echo present || echo missing)" '{schemaVersion:1,status:"PRODUCTION_RUNTIME_PASS_STATIC_HEADERS_RECORDED",deployedSha:$sha,cloudflareVersionId:$version,productionUrl:$url,runId:$run,rootHeaders:{nosniff:$rootNosn,csp:$rootCsp},costUsd:0,paymentData:"NO",rfTx:"NO",verifiedAt:(now|todateiso8601)}' > artifacts/order010-production-probe/checkpoint.json
           cat artifacts/order010-production-probe/checkpoint.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: order010-production-probe-v2
           path: artifacts/order010-production-probe
