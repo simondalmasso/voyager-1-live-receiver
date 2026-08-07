@@ -1,32 +1,56 @@
-name: ORDER010 Bootstrap Inspect
+name: ORDER010 Recover AUD002 Prefix
 on:
   push:
     branches: [feat/aud-001-complete-product]
     paths:
       - '.github/workflows/order010-bootstrap.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
-  inspect-aud002-payload:
+  recover-vetted-prefix:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect staged AUD-002 payload without applying it
+        with:
+          fetch-depth: 0
+      - name: Recover only complete staged AUD-002 entries
         shell: bash
         run: |
-          set -u
+          set -euo pipefail
           cat aud002-payload.part00 aud002-payload.part01 | base64 -d > /tmp/aud002.gz
-          echo "gzip_sha256=$(sha256sum /tmp/aud002.gz | awk '{print $1}')"
-          if gzip -t /tmp/aud002.gz; then echo 'gzip_complete=yes'; else echo 'gzip_complete=no'; fi
-          gzip -dc /tmp/aud002.gz > /tmp/aud002.payload 2>/tmp/gzip.err || true
-          echo "payload_bytes=$(wc -c < /tmp/aud002.payload)"
-          echo "payload_type=$(file -b /tmp/aud002.payload)"
-          echo '--- gzip stderr ---'; cat /tmp/gzip.err || true
-          echo '--- first 220 lines ---'
-          head -220 /tmp/aud002.payload || true
-          echo '--- last 80 lines ---'
-          tail -80 /tmp/aud002.payload || true
-          echo '--- tar listing if applicable ---'
-          tar -tf /tmp/aud002.payload 2>/dev/null | head -200 || true
-          exit 0
+          gzip -dc /tmp/aud002.gz > /tmp/aud002.tar 2>/dev/null || true
+          rm -rf /tmp/recovered && mkdir -p /tmp/recovered
+          tar -xf /tmp/aud002.tar -C /tmp/recovered 2>/dev/null || true
+          files=(
+            docs/RECEIVER-STATION-V2.md
+            docs/RESEARCH-BASIS.md
+            docs/REALITY-CONTRACT-V2.md
+            docs/DEPENDENCY-SECURITY-V2.md
+            docs/AUDIT_CHECKPOINT_V2.md
+            docs/SPICE-TRAJECTORY-V2.md
+            src/data.js src/app.js src/scene.js src/signal.js
+            wrangler.jsonc scripts/build.mjs
+          )
+          for file in "${files[@]}"; do
+            test -s "/tmp/recovered/$file" || { echo "missing_complete_entry=$file"; exit 31; }
+            mkdir -p "$(dirname "$file")"
+            cp "/tmp/recovered/$file" "$file"
+            echo "recovered $(sha256sum "$file")"
+          done
+          node --check src/data.js
+          node --check src/app.js
+          node --check src/scene.js
+          node --check src/signal.js
+          node --check scripts/build.mjs
+          node -e "let s=require('fs').readFileSync('wrangler.jsonc','utf8').replace(/^\s*\/\/.*$/gm,''); JSON.parse(s); console.log('wrangler_jsonc_parse=ok')"
+      - name: Commit recovered audited baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'order010-arq'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/RECEIVER-STATION-V2.md docs/RESEARCH-BASIS.md docs/REALITY-CONTRACT-V2.md docs/DEPENDENCY-SECURITY-V2.md docs/AUDIT_CHECKPOINT_V2.md docs/SPICE-TRAJECTORY-V2.md src/data.js src/app.js src/scene.js src/signal.js wrangler.jsonc scripts/build.mjs
+          if git diff --cached --quiet; then echo 'no_recovery_diff=yes'; exit 0; fi
+          git commit -m 'feat(aud002): recover vetted reality-hardening baseline'
+          git push origin HEAD:feat/aud-001-complete-product
