@@ -2,7 +2,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import platform
 import struct
 import sys
@@ -10,7 +9,7 @@ import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterator
 from .dsp.detector import analyze
 from .dsp.doppler import classical_observed_frequency
 from .ephemeris.horizons import topocentric_query
@@ -65,7 +64,7 @@ def predict_command(args: argparse.Namespace) -> dict[str, Any]:
     return {"schemaVersion":1,"truthClass":"DERIVED_GEOMETRY","receiveOnly":True,"observer":{"lat":args.lat,"lon":args.lon,"elevationM":args.elevation_m},"restCarrierHz":args.carrier_hz,"points":points,"estimatedDriftHzPerSecond":drift,"sourceUrl":url,"generatedAt":utc_now()}
 
 def _horizons_observer_rows(text: str) -> list[dict[str, Any]]:
-    start=text.find("$$SOE");end=text.find("$$EOE");
+    start=text.find("$$SOE");end=text.find("$$EOE")
     if start<0 or end<start:return []
     rows=[]
     for line in text[start+5:end].splitlines():
@@ -76,7 +75,6 @@ def _horizons_observer_rows(text: str) -> list[dict[str, Any]]:
             try:nums.append(float(x))
             except ValueError:pass
         if len(nums)<2:continue
-        # QUANTITIES=20 ends with range (AU) and range-rate (km/s) in CSV output.
         range_au,range_rate=nums[-2],nums[-1]
         if not (0<abs(range_au)<1000 and abs(range_rate)<100):continue
         rows.append({"observedAt":_parse_horizons_date(date),"rangeAu":range_au,"rangeRateKmS":range_rate})
@@ -140,10 +138,13 @@ def main(argv: list[str] | None=None)->int:
         if args.synthetic:
             samples=generate();detection,spectrum=analyze(samples,4096,DEFAULT_CARRIER_HZ,DEFAULT_CARRIER_HZ,drift_hz_s=.2);sequence={"v":0}
             def provider()->dict[str,Any]:
-                sequence["v"]+=1;return signal_snapshot(detection,spectrum,stream_id="synthetic-demo",sequence=sequence["v"],source_mode="SYNTHETIC_TEST",station_id="local-fixture",station_name="Local deterministic fixture",started_at=utc_now(),sample_rate_hz=4096,center_frequency_hz=DEFAULT_CARRIER_HZ,datatype="cf32_le",bin_width_hz=1,provenance=Provenance("SYNTHETIC_TEST","listener-synthetic",utc_now()))
+                sequence["v"]+=1
+                return signal_snapshot(detection,spectrum,stream_id="synthetic-demo",sequence=sequence["v"],source_mode="SYNTHETIC_TEST",station_id="local-fixture",station_name="Local deterministic fixture",started_at=utc_now(),sample_rate_hz=4096,center_frequency_hz=DEFAULT_CARRIER_HZ,datatype="cf32_le",bin_width_hz=1,provenance=Provenance("SYNTHETIC_TEST","listener-synthetic",utc_now()))
         elif args.meta:
             snap,_=analyze_meta(args.meta,None,0.0,4096,.5,args.manifest);sequence={"v":0}
-            def provider()->dict[str,Any]:sequence["v"]+=1;return {...snap,"sequence":sequence["v"],"generatedAt":utc_now()}
+            def provider()->dict[str,Any]:
+                sequence["v"]+=1
+                return {**snap,"sequence":sequence["v"],"generatedAt":utc_now()}
         else:raise SystemExit("serve requires --synthetic or a SigMF metadata path")
         server=SnapshotServer(provider,args.host,args.port);print(f"serving receive-only products on http://{args.host}:{args.port}",file=sys.stderr);server.serve_forever();return 0
     if args.command=="replay":
