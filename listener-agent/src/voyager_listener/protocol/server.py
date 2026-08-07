@@ -1,18 +1,31 @@
 from __future__ import annotations
 import json
 import os
-import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
+from urllib.parse import urlsplit
+
+
+def _validated_origin(value: str) -> str:
+    if any(ch in value for ch in "\r\n\x00"):
+        raise ValueError("allowed origin contains control characters")
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("allowed origin must be an http(s) origin")
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        raise ValueError("allowed origin must not contain path, query or fragment")
+    return f"{parsed.scheme}://{parsed.netloc}"
+
 
 class SnapshotServer:
     def __init__(self, provider: Callable[[], dict[str, Any]], host: str = "127.0.0.1", port: int = 8765, allowed_origin: str = "http://127.0.0.1:4173") -> None:
         if host not in {"127.0.0.1", "localhost", "::1"} and os.getenv("VOYAGER_LISTENER_ALLOW_REMOTE") != "1":
             raise ValueError("remote bind requires VOYAGER_LISTENER_ALLOW_REMOTE=1")
-        self.provider, self.host, self.port, self.allowed_origin = provider, host, port, allowed_origin
+        self.provider, self.host, self.port = provider, host, port
+        self.allowed_origin = _validated_origin(allowed_origin)
         provider_ref = provider
-        allowed = allowed_origin
+        allowed = self.allowed_origin
         token = os.getenv("VOYAGER_LISTENER_TOKEN")
         class Handler(BaseHTTPRequestHandler):
             server_version = "VoyagerListener/1"
@@ -21,9 +34,8 @@ class SnapshotServer:
                     self.send_response(401); self.end_headers(); return False
                 return True
             def _headers(self, content_type: str) -> None:
-                origin = self.headers.get("origin")
-                if origin == allowed:
-                    self.send_header("Access-Control-Allow-Origin", origin)
+                if self.headers.get("origin") == allowed:
+                    self.send_header("Access-Control-Allow-Origin", allowed)
                     self.send_header("Vary", "Origin")
                 self.send_header("Content-Type", content_type)
                 self.send_header("Cache-Control", "no-store")
