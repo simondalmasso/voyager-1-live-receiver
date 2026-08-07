@@ -1,36 +1,51 @@
-# Voyager 1 Live Receiver
+# Voyager Link
 
-An independent, receive-only webapp that combines a navigable WebGL mission scene, JPL Horizons geometry, opportunistic DSN status, and a local SigMF/synthetic narrowband receiver. It is not affiliated with NASA, JPL, or the Deep Space Network and cannot send commands to Voyager 1.
+Voyager Link is an independent, receive-only Voyager 1 mission experience and verified signal laboratory. It is not affiliated with NASA, JPL, or the Deep Space Network. It contains no RF uplink, command, transmitter, telescope-control, or DSN-control path.
 
-## Truth modes
+## Product
 
-| Label | Meaning |
+- Fullscreen desktop/mobile 3D scene with NASA's official lightweight Voyager GLB as the primary model and a procedural fallback.
+- Current JPL Horizons geocentric geometry: distance, one-way/round-trip light time, range rate, RA/Dec and optional request-only observer az/el.
+- Reproducible NAIF/SPICE trajectory from launch onward, with adaptive encounter sampling and a machine-recorded Horizons cross-check.
+- Public DSN Now status, explicitly separated from telescope reception and spacecraft telemetry.
+- Official NASA mission/instrument status snapshots, explicitly time-stamped and never represented as live telemetry.
+- Receive-only Python listener for SigMF, SoapySDR, GNU Radio UDP and stdin streams, including Doppler prediction and narrowband detection.
+- Cloudflare SQLite Durable Object ReceiverHub for replay-safe, Ed25519-signed reduced products and hibernating WebSocket fan-out.
+- Signal Hunt synthetic training, Virtual Light Pulse, Truth Layer, YouTube album control and offline PWA shell.
+
+## Truth classes
+
+| Class | Meaning |
 |---|---|
-| `TELESCOPE_LIVE` | Fresh reduced products from a real operator-controlled receiver with heartbeat and provenance. |
-| `RECORDED_AUTHENTIC` | A prior real capture whose manifest, source, license, and checksum are verified. |
-| `SYNTHETIC_TEST` / `SIMULATED` | Deterministic generated IQ or visual motion used for tests and demonstration. |
-| `DERIVED` / `INTERPOLATED` | Values computed from sourced inputs or deliberately compressed rendering coordinates. |
-| `STALE` / `UNAVAILABLE` | Honest fallback when an upstream or source is unavailable. |
-
-`LIVE` never means access to JPL/DSN operations. The implemented communication path is passive reception of a narrow X-band carrier through an external telescope/listener node.
+| `MISSION_STATUS_OFFICIAL_SNAPSHOT` | Official NASA mission/instrument snapshot at a stated verification time. |
+| `DSN_LIVE_PUBLIC_STATUS` | Public DSN Now activity only; never DSN command/control. |
+| `PWS_ARCHIVED_SCIENCE` | Archived Plasma Wave Subsystem science. |
+| `DERIVED_GEOMETRY` | Reproducible values calculated from sourced geometry. |
+| `TELESCOPE_LIVE_VERIFIED` | Fresh registered-station product after signature, timestamp, station, band and replay gates. |
+| `RECORDED_AUTHENTIC_VERIFIED` | Recording with machine-verifiable provenance and hashes. |
+| `SYNTHETIC_TEST` | Generated test/challenge data; cannot promote itself to live. |
+| `UNVERIFIED_SOURCE` | Physical/supplied source that has not passed the live/authenticity contract. |
+| `STALE`, `LOST`, `UNAVAILABLE` | Explicit degraded states. |
 
 ## Architecture
 
 ```text
-NASA/JPL Horizons + DSN public feed -> Cloudflare Worker -> browser data layer
-operator SigMF/SDR -> local Python listener -> HTTP snapshot/SSE -> browser Signal mode
-browser -> custom dependency-free WebGL scene + accessible HTML controls
+NASA/JPL Horizons ─┐
+NASA DSN public ───┼─> Cloudflare Worker ─> browser Truth Layer / 3D mission scene
+NASA mission/PDS ──┘          │
+NAIF/SPICE artifact ──────────┤
+                              └─> SQLite ReceiverHub Durable Object
+                                   ├─ station sequence + nonce replay state
+                                   ├─ latest verified reduced product (30 s TTL)
+                                   └─ hibernating WebSocket clients
+
+SDR / telescope / SigMF -> local listener -> signed reduced product -> /api/v1/receiver/ingest
+                                                      browser <- /snapshot + /live
 ```
 
-The native ES-module/WebGL architecture is recorded in ADR 0001. It removes runtime package supply-chain and bundle weight while keeping the public seams required by AUD-001. The procedural spacecraft is a clearly labeled fallback; an official NASA model is not redistributed until asset terms and a reproducible checksum are verified.
+Raw IQ is not uploaded by the canonical live path. The Worker verifies the registered station, Ed25519 signature, timestamp/future skew, allowed X-band range, source mode and detector state before the Durable Object can accept a product. Sequence and nonce checks are persisted transactionally in SQLite.
 
-## Requirements
-
-- Node.js 24 LTS and npm 11
-- Python 3.12+
-- Optional: a supported SDR stack, radiotelescope access, NumPy/SciPy, Astropy/Astroquery, SoapySDR, or GNU Radio
-
-## Quickstart web
+## Local web
 
 ```bash
 npm ci
@@ -38,7 +53,7 @@ npm run dev
 # http://127.0.0.1:4173
 ```
 
-## Quickstart synthetic listener
+## Listener
 
 ```bash
 PYTHONPATH=listener-agent/src python -m voyager_listener.cli doctor
@@ -47,18 +62,9 @@ PYTHONPATH=listener-agent/src python -m voyager_listener.cli analyze /tmp/voyage
 PYTHONPATH=listener-agent/src python -m voyager_listener.cli serve --synthetic
 ```
 
-Open Signal mode and choose `TELESCOPE LIVE`; the local endpoint is still truth-labeled synthetic because its source metadata says so.
+Synthetic products remain `SYNTHETIC_TEST` everywhere. A physical local stream remains `UNVERIFIED_SOURCE` until it satisfies the registered-station live contract.
 
-## SigMF
-
-```bash
-PYTHONPATH=listener-agent/src python -m voyager_listener.cli analyze capture.sigmf-meta --expected-frequency-hz 8420430000
-PYTHONPATH=listener-agent/src python -m voyager_listener.cli serve capture.sigmf-meta
-```
-
-The core supports chunked `cf32_le` and `ci16_le`. An authentic capture is never inferred from a filename in production; operators must provide the provenance manifest described in `docs/SIGMF.md`.
-
-## Checks
+## Verification
 
 ```bash
 npm test
@@ -67,37 +73,23 @@ npm run format:check
 npm run build
 npm run bundle:report
 npm run verify:data
+npm run inventory
 PYTHONPATH=listener-agent/src python -m unittest discover -s listener-agent/tests -v
+npx wrangler@4.114.0 deploy --dry-run --outdir .wrangler-dry-run
 ```
 
-CI additionally runs Playwright desktop/mobile, axe, Wrangler dry-run, source/license inventory, and security checks. No workflow deploys.
+CI additionally runs Playwright desktop/mobile, axe, listener evidence, security checks and deployment dry-run artifacts.
 
-## Cloudflare pre-deploy
+## Cloudflare
 
-`wrangler.jsonc` uses Static Assets with `/api/*` worker-first and SPA fallback. The exact future command is:
+`wrangler.jsonc` uses Static Assets with `/api/*` Worker-first routing and a SQLite Durable Object binding named `RECEIVER_HUB`. Order 010 authorizes deployment through GitHub Secrets with `USD_BUDGET=0`; secret values must never be printed or committed.
 
-```bash
-npx wrangler@4.114.0 deploy
-```
+## Privacy and safety
 
-**Do not execute it without a separate AUD/owner authorization.** No remote Worker, route, binding, DNS, storage, secret, payment method, or production URL has been created by AUD-001.
-
-## Repository map
-
-- `src/`: browser UI, scene, signal visualization, data layer
-- `worker/`: versioned API, Horizons/DSN adapters, security headers and fallbacks
-- `shared/`: contracts, units and truth validation
-- `listener-agent/`: receive-only Python DSP and SigMF/SSE implementation
-- `data/`: source manifests and small deterministic metadata
-- `docs/`: architecture, operations, science, security and audit records
-- `tests/`: Node contract/Worker/content tests and Playwright E2E
-
-## Privacy
-
-No account, analytics, ads, fingerprinting, microphone, camera, or automatic geolocation request. Precise observer coordinates are request-scoped and not persisted by the app.
+No account, ads, analytics, fingerprinting, microphone, camera, automatic geolocation, payment data or RF transmission. Observer coordinates are request-scoped and are not persisted. The public app does not expose any DSN, spacecraft-command, RF-transmit or telescope-control capability.
 
 ## Known limits
 
-No redistributable authentic IQ capture or official NASA 3D model is bundled. DSN Now is an opportunistic public-status source, not a telescope-control interface. The pure-Python FFT core is intended for deterministic fixtures and small captures; optional NumPy/SciPy acceleration is recommended for observatory-scale data. See `docs/AUDIT_CHECKPOINT.md`.
+A real green `TELESCOPE_LIVE_VERIFIED` state requires an independently operated, registered receive-only station and fresh signed reduced products. DSN Now is opportunistic public status. NASA upstreams can degrade; degraded states remain labeled. Authentic raw IQ is not redistributed by default.
 
-Licensed MIT. See `THIRD_PARTY_NOTICES.md` and `data/sources.json`.
+Licensed MIT. See `THIRD_PARTY_NOTICES.md`, `data/sources.json`, `docs/PRODUCT_TRUTH.md`, `docs/SECURITY.md`, and `artifacts/science-evidence/`.
