@@ -22,7 +22,7 @@ export function parseHorizonsVectors(text,fetchedAt=new Date().toISOString()){
 }
 export function buildHorizonsObserverUrl({startAt,stopAt,stepMinutes,lat,lon,elevation=0}){
   const site=`${lon},${lat},${elevation/1000}`;
-  const q=new URLSearchParams({format:'text',COMMAND:"'-31'",OBJ_DATA:'NO',MAKE_EPHEM:'YES',EPHEM_TYPE:'OBSERVER',CENTER:"'coord@399'",SITE_COORD:`'${site}'`,START_TIME:`'${fmt(startAt)}'`,STOP_TIME:`'${fmt(stopAt)}'`,STEP_SIZE:`'${stepMinutes} m'`,QUANTITIES:"'4,20'",CSV_FORMAT:'YES'});
+  const q=new URLSearchParams({format:'text',COMMAND:"'-31'",OBJ_DATA:'NO',MAKE_EPHEM:'YES',EPHEM_TYPE:'OBSERVER',CENTER:"'coord@399'",SITE_COORD:`'${site}'`,START_TIME:`'${fmt(startAt)}'`,STOP_TIME:`'${fmt(stopAt)}'`,STEP_SIZE:`'${stepMinutes} m'`,TIME_DIGITS:'SECONDS',QUANTITIES:"'4,20'",CSV_FORMAT:'YES'});
   return `${ENDPOINT}?${q}`;
 }
 export function parseHorizonsObserver(text,fetchedAt=new Date().toISOString()){
@@ -42,4 +42,9 @@ export async function fetchHorizonsObserverSeries(params,fetchImpl=fetch){
   const response=await fetchImpl(url,{headers:{'user-agent':'voyager-link-order011-r2/1.0','accept':'text/plain'},signal:AbortSignal.timeout(12000)});if(!response.ok)throw new Error(`HORIZONS_OBSERVER_HTTP_${response.status}`);
   const text=await response.text();return {rows:parseHorizonsObserver(text,fetchedAt),fetchedAt,sourceUrl:url,sourceId:'jpl-horizons-observer',upstreamAuthority:'JPL Horizons'};
 }
-function parseHorizonsDate(value=''){const m=value.match(/(?:A\.D\.\s*)?(\d{4})-([A-Z][a-z]{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);if(!m)return null;const month=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(m[2]);if(month<0)return null;return new Date(Date.UTC(+m[1],month,+m[3],+m[4],+m[5],+m[6],m[7]?Math.round(Number(`0.${m[7]}`)*1000):0)).toISOString()}
+function parseHorizonsDate(value=''){
+  const m=value.match(/(?:A\.D\.\s*)?(\d{4})-([A-Z][a-z]{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/);if(!m)return null;
+  const month=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(m[2]);if(month<0)return null;
+  const seconds=m[6]?+m[6]:0,millis=m[7]?Math.round(Number(`0.${m[7]}`)*1000):0;
+  return new Date(Date.UTC(+m[1],month,+m[3],+m[4],+m[5],seconds,millis)).toISOString();
+}
