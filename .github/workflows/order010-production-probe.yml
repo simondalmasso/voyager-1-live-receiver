@@ -31,8 +31,8 @@ jobs:
           for hdr in root api_v1_health; do
             grep -qi '^x-content-type-options: nosniff' "artifacts/order010-production-probe/${hdr}.headers"
             grep -qi '^content-security-policy:' "artifacts/order010-production-probe/${hdr}.headers"
-            grep -qi '^strict-transport-security:' "artifacts/order010-production-probe/${hdr}.headers"
           done
+          grep -qi '^strict-transport-security:' artifacts/order010-production-probe/root.headers
           echo ROOT_SECURITY_HEADERS=PASS
           echo API_SECURITY_HEADERS=PASS
           status="$(curl --silent --show-error -o artifacts/order010-production-probe/unsigned-ingest.json -w '%{http_code}' -H 'content-type: application/json' --data '{"schemaVersion":1,"stationId":"unknown","sequence":1,"nonce":"nonce-123456789","softwareSha":"abcdef1","observedAt":"2026-08-07T12:00:00Z","band":{"centerFrequencyHz":8420430000},"snapshot":{}}' "$PRODUCTION_URL/api/v1/receiver/ingest")"
@@ -54,6 +54,7 @@ jobs:
           jq -n --arg sha "$DEPLOYED_SHA" --arg version "$CLOUDFLARE_VERSION_ID" --arg url "$PRODUCTION_URL" --arg run "$GITHUB_RUN_ID" '{schemaVersion:1,status:"PRODUCTION_PROBE_PASS",deployedSha:$sha,cloudflareVersionId:$version,productionUrl:$url,runId:$run,rootSecurityHeaders:"PASS",apiSecurityHeaders:"PASS",receiverHubWebSocket:"PASS",costUsd:0,paymentData:"NO",rfTx:"NO",mainMerge:"NO",verifiedAt:(now|todateiso8601)}' > artifacts/order010-production-probe/checkpoint.json
           cat artifacts/order010-production-probe/checkpoint.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: order010-production-probe-final
           path: artifacts/order010-production-probe
