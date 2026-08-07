@@ -9,6 +9,7 @@
   "paymentData": "NO",
   "rfTx": "NO",
   "mainMerge": "NO",
-  "attempt": 3,
-  "requestedAt": "2026-08-07T15:05:00Z"
+  "attempt": 4,
+  "baselineCloudflareVersion": "b4b8e490-3b4f-4f05-898d-b2ace00842bf",
+  "requestedAt": "2026-08-07T15:22:00Z"
 }
