@@ -22,7 +22,7 @@ export function parseHorizonsVectors(text,fetchedAt=new Date().toISOString()){
 }
 export function buildHorizonsObserverUrl({startAt,stopAt,stepMinutes,lat,lon,elevation=0}){
   const site=`${lon},${lat},${elevation/1000}`;
-  const q=new URLSearchParams({format:'text',COMMAND:"'-31'",OBJ_DATA:'NO',MAKE_EPHEM:'YES',EPHEM_TYPE:'OBSERVER',CENTER:"'coord@399'",SITE_COORD:`'${site}'`,START_TIME:`'${fmt(startAt)}'`,STOP_TIME:`'${fmt(stopAt)}'`,STEP_SIZE:`'${stepMinutes} m'`,TIME_DIGITS:'SECONDS',QUANTITIES:"'4,20'",CSV_FORMAT:'YES'});
+  const q=new URLSearchParams({format:'text',COMMAND:"'-31'",OBJ_DATA:'NO',MAKE_EPHEM:'YES',EPHEM_TYPE:'OBSERVER',CENTER:"'coord@399'",SITE_COORD:`'${site}'`,START_TIME:`'${fmt(startAt)}'`,STOP_TIME:`'${fmt(stopAt)}'`,STEP_SIZE:`'${stepMinutes} m'`,TIME_DIGITS:'SECONDS',QUANTITIES:"'20'",CSV_FORMAT:'YES'});
   return `${ENDPOINT}?${q}`;
 }
 export function parseHorizonsObserver(text,fetchedAt=new Date().toISOString()){
@@ -32,8 +32,8 @@ export function parseHorizonsObserver(text,fetchedAt=new Date().toISOString()){
   for(const line of text.slice(start+5,end).split(/\r?\n/).map(x=>x.trim()).filter(Boolean)){
     const fields=line.split(',').map(x=>x.trim()),dateField=fields.find(x=>parseHorizonsDate(x));if(!dateField)continue;
     const nums=[];for(const field of fields){if(field==='')continue;const n=Number(field);if(Number.isFinite(n))nums.push(n)}
-    if(nums.length<4)continue;const [azimuthDeg,elevationDeg,rangeAu,rangeRateKmS]=nums.slice(-4);if(!(azimuthDeg>=0&&azimuthDeg<=360&&elevationDeg>=-90&&elevationDeg<=90&&Math.abs(rangeAu)>0&&Math.abs(rangeAu)<1000&&Math.abs(rangeRateKmS)<100))continue;
-    rows.push({observedAt:parseHorizonsDate(dateField),azimuthDeg,elevationDeg,rangeKm:rangeAu*AU_KM,rangeRateKmS,fetchedAt});
+    if(nums.length<2)continue;const [rangeAu,rangeRateKmS]=nums.slice(-2);if(!(Math.abs(rangeAu)>0&&Math.abs(rangeAu)<1000&&Math.abs(rangeRateKmS)<100))continue;
+    rows.push({observedAt:parseHorizonsDate(dateField),rangeKm:rangeAu*AU_KM,rangeRateKmS,fetchedAt});
   }
   if(!rows.length)throw new Error('HORIZONS_OBSERVER_NOT_FOUND');return rows;
 }
