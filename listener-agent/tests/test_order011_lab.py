@@ -9,6 +9,7 @@ from voyager_listener.lab.evidence import *
 from voyager_listener.lab.multistation import *
 from voyager_listener.lab.decoder import *
 from voyager_listener.lab.pipeline import *
+from voyager_listener.lab.adapters import frames_from_chunks
 
 def tone(count,fs,bin_pos,nfft):return [cmath.exp(2j*math.pi*(bin_pos*fs/nfft)*i/fs) for i in range(count)]
 def frame(seq=0,samples=None,truth="SYNTHETIC_TEST"):
@@ -18,6 +19,12 @@ class LabTests(unittest.TestCase):
         b=CanonicalIQBus();c=b.subscribe("slow",2);b.publish(frame(0));b.publish(frame(2));b.publish(frame(3));self.assertEqual(c.snapshot()["droppedFrames"],1);self.assertEqual(b.snapshot()["sequenceGaps"],1);b.close();self.assertTrue(b.closed)
     def test_replay_preserves_truth_and_timestamp(self):
         f=frame();r=next(replay_frames([f],lambda:"2026-08-07T12:01:00Z"));self.assertEqual(r.timestamp_start,f.timestamp_start);self.assertEqual(r.source_truth_class,"SYNTHETIC_TEST");self.assertIsNotNone(r.replay_received_at)
+    def test_live_replay_adapters_share_identical_dsp_after_normalization(self):
+        samples=tone(1024,1024,30.35,256);cfg=SpectrometerConfig(mode="WOLA",nfft=256,taps=4)
+        live=next(frames_from_chunks([samples],stream_id="live",sample_rate_hz=1024,center_frequency_hz=8420430000,truth_class="UNVERIFIED_SOURCE",provenance_id="soapy-fixture",start_time="2026-08-07T12:00:00Z",timestamp_quality="HARDWARE"))
+        recorded=next(frames_from_chunks([samples],stream_id="replay",sample_rate_hz=1024,center_frequency_hz=8420430000,truth_class="RECORDED_AUTHENTIC_VERIFIED",provenance_id="sigmf-fixture",start_time="2026-08-07T12:00:00Z",timestamp_quality="RECORDED"))
+        a=DeepSpaceLabPipeline(cfg).process(live);b=DeepSpaceLabPipeline(cfg).process(recorded)
+        self.assertEqual(a["spectrum"]["valuesDb"],b["spectrum"]["valuesDb"]);self.assertEqual(a["truthClass"],"UNVERIFIED_SOURCE");self.assertEqual(b["truthClass"],"RECORDED_AUTHENTIC_VERIFIED")
     def test_wola_suppresses_far_sidelobes(self):
         x=tone(1024,1024,30.35,256);a=simple_fft_spectrum(x,256);w=wola_spectrum(x,256,4)
         def margin(p):
