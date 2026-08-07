@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "order": 10,
-  "attempt": 3,
+  "attempt": 4,
   "action": "CONTINUE_ORDER_010_END_TO_END",
   "audCommentId": 5214873711,
   "canonicalBranch": "feat/aud-001-complete-product",
@@ -10,7 +10,7 @@
   "paymentData": "NO",
   "rfTx": "NO",
   "mainMerge": "NO",
-  "requestedAt": "2026-08-07T12:23:00Z",
+  "requestedAt": "2026-08-07T12:37:00Z",
   "terminalState": "DEPLOYED_READY_FOR_AUD",
-  "repairBasis": "apply CSP/nosniff/HSTS worker policy to static UI and assets"
+  "repairBasis": "bound official NASA GLB loading to 8s and terminate truthfully on procedural fallback"
 }
