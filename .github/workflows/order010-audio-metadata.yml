@@ -1,0 +1,29 @@
+name: ORDER010 Audio Metadata
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['.github/workflows/order010-audio-metadata.yml']
+permissions:
+  contents: read
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Fetch metadata only; never media bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check 'yt-dlp>=2025.1'
+          yt-dlp --skip-download --dump-single-json 'https://www.youtube.com/watch?v=kr9-QrMhfzY' > /tmp/meta.json
+          python - <<'PY'
+          import json
+          m=json.load(open('/tmp/meta.json'))
+          print('TITLE=',m.get('title'))
+          print('DURATION=',m.get('duration'))
+          print('UPLOADER=',m.get('uploader'))
+          print('CHAPTERS=',json.dumps(m.get('chapters'),ensure_ascii=False))
+          print('DESCRIPTION_HEAD=',(m.get('description') or '')[:5000].replace('\n',' | '))
+          PY
