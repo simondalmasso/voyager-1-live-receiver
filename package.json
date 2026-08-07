@@ -1,9 +1,9 @@
 {
   "name": "voyager-1-live-receiver",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
-  "description": "Voyager Link immersive mission and verified receive-only signal laboratory",
+  "description": "Voyager Link immersive mission and verified receive-only deep-space signal laboratory",
   "engines": { "node": ">=24 <27", "npm": ">=11" },
   "scripts": {
     "dev": "node scripts/serve.mjs",
