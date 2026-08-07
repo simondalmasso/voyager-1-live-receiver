@@ -10,6 +10,6 @@ export default {async fetch(request,env,ctx){
     if(request.method==='GET'&&p==='/api/v2/lab/pipeline')return json(pipelineTelemetry(await hubSnapshot(env)));
     if(request.method==='GET'&&p==='/api/v2/station/physics')return json(stationPhysics(Object.fromEntries(url.searchParams.entries())));
     if(request.method==='GET'&&p==='/api/v2/observation-window')return json(observationWindow(await state(),Object.fromEntries(url.searchParams.entries())));
-  }catch(error){return json({schemaVersion:2,error:{code:String(error?.message||error),message:'Order 011 laboratory request rejected'},generatedAt:new Date().toISOString()},400)}
+  }catch{return json({schemaVersion:2,error:{code:'LAB_REQUEST_INVALID',message:'Order 011 laboratory request rejected'},generatedAt:new Date().toISOString()},400)}
   return baseWorker.fetch(request,env,ctx);
 }};
