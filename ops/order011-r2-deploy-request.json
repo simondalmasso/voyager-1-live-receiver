@@ -1,0 +1,14 @@
+{
+  "action": "EXECUTE_ORDER_011_R2_END_TO_END",
+  "audCommentId": 5219306424,
+  "baselineProductionSha": "3ab7a0e9d26ec9a9bcd17002ec2b83bebf0b8cde",
+  "rollbackVersion": "c5347959-18db-4411-8ecd-33be76c9ad64",
+  "preserveFullscreenBaseline": true,
+  "deployCorrectedProduction": true,
+  "rollbackOnMaterialRegression": true,
+  "usdBudget": 0,
+  "paymentData": "NO",
+  "rfTx": "NO",
+  "mainMerge": "NO",
+  "requestedAt": "2026-08-07T16:37:00Z"
+}
