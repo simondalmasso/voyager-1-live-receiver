@@ -1,0 +1,29 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {parseHorizonsVectors} from '../worker/horizons.js';
+import {parseDsnXml} from '../worker/dsn.js';
+import {api,SECURITY} from '../worker/index.js';
+const H=`header\n$$SOE\n2461000.5, A.D. 2026-Aug-05 00:00:00.0000, -1.9E+10, -1.5E+10, 7.7E+9, -12.4, -10.2, 5.1, 0,0,0\n$$EOE`;
+
+test('Horizons parser requires markers, finite vectors and derived truth',()=>{
+  const s=parseHorizonsVectors(H,'2026-08-05T00:00:01Z');
+  assert.equal(s.provenance.truthClass,'DERIVED_GEOMETRY');
+  assert.equal(s.provenance.upstreamAuthority,'JPL Horizons');
+  assert.ok(s.distanceKm>1e10);
+  assert.throws(()=>parseHorizonsVectors('<html>error</html>'));
+});
+
+test('DSN parser rejects entities and only reports explicit Voyager 1',()=>{
+  assert.throws(()=>parseDsnXml('<!DOCTYPE x [<!ENTITY y SYSTEM "file:///etc/passwd">]>'));
+  const d=parseDsnXml('<root><dish name="DSS-14" complex="Goldstone"><target>Voyager 1</target><band>X</band></dish></root>');
+  assert.equal(d.available,true);
+  assert.equal(d.stations[0].target,'Voyager 1');
+  assert.equal(d.provenance.truthClass,'DSN_LIVE_PUBLIC_STATUS');
+});
+
+test('API validates observer inputs and emits security headers',async()=>{
+  const url=new URL('https://x/api/v1/voyager/sky?lat=999&lon=0');
+  const r=await api(new Request(url),url,{});
+  assert.equal(r.status,400);
+  assert.equal(SECURITY['x-content-type-options'],'nosniff');
+});

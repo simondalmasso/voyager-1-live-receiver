@@ -1,0 +1,14 @@
+{
+  "action": "EXECUTE_ORDER_011_R3_EVIDENCE_TRUTH_PATCH",
+  "audCommentId": 5220223426,
+  "baselineProductionSha": "035565aff485d5911d53fc24cf960a8b65a8d146",
+  "rollbackVersion": "938280db-e9f7-42c1-a7a3-bcc0c18eca41",
+  "preserveFullscreen": true,
+  "preserveR2Science": true,
+  "usdBudget": 0,
+  "paymentData": "NO",
+  "rfTx": "NO",
+  "mainMerge": "NO",
+  "attempt": 3,
+  "requestedAt": "2026-08-07T18:03:00Z"
+}

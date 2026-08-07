@@ -1,0 +1,109 @@
+name: ORDER010 Production Browser Verify
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['.github/workflows/order010-production-browser.yml']
+permissions:
+  contents: read
+jobs:
+  remote-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PRODUCTION_URL: https://voyager-1-live-receiver.simondalmasso44.workers.dev
+      DEPLOYED_SHA: b062166398b5ad8717f6626582277702d2792ad1
+      CLOUDFLARE_VERSION_ID: 84ef1708-2210-4bd0-9cc5-e25fd9e9cc3e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - name: Install browser verification dependencies
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --no-save --package-lock=false @playwright/test@1.62.0 @axe-core/playwright@4.12.1
+          npx playwright install --with-deps chromium webkit
+      - name: Create production-only Playwright suite
+        shell: bash
+        run: |
+          cat > playwright.production.config.mjs <<'EOF'
+          import {defineConfig,devices} from '@playwright/test';
+          export default defineConfig({testDir:'./tests/e2e-production',timeout:45000,retries:1,reporter:[['html',{outputFolder:'artifacts/order010-production-browser/report',open:'never'}],['list']],use:{baseURL:process.env.PRODUCTION_URL,trace:'on',screenshot:'on'},projects:[{name:'desktop',use:{...devices['Desktop Chrome']}},{name:'mobile-chromium',use:{...devices['Pixel 7']}},{name:'mobile-webkit',use:{...devices['iPhone 14']}}]});
+          EOF
+          mkdir -p tests/e2e-production artifacts/order010-production-browser/screenshots
+          cat > tests/e2e-production/production.spec.mjs <<'EOF'
+          import {test,expect} from '@playwright/test';
+          import AxeBuilder from '@axe-core/playwright';
+          test('remote experience, truth, signal lab and virtual pulse',async({page},info)=>{
+            await page.goto('/',{waitUntil:'domcontentloaded'});
+            await expect(page.locator('#freshness')).not.toHaveText(/Loading source state/i,{timeout:15000});
+            await expect(page.getByRole('heading',{name:/farthest human-made object/i})).toBeVisible();
+            await expect(page.locator('#model-label')).toContainText(/NASA OFFICIAL GLB|WEBGL 2D FALLBACK|PROCEDURAL FALLBACK/,{timeout:15000});
+            if(await page.locator('#webgl-fallback').isVisible())await expect(page.locator('#model-label')).toContainText('WEBGL 2D FALLBACK');
+            await page.getByRole('button',{name:/SIGNAL/}).click();
+            await expect(page.locator('#signal-panel')).toBeVisible();
+            await expect(page.locator('#signal-truth')).toHaveText('SYNTHETIC TEST');
+            await expect(page.locator('#signal-disclaimer')).toContainText('not a live Voyager reception');
+            await page.locator('#virtual-pulse').click();
+            await expect(page.locator('#pulse-status')).toContainText('NO RF TRANSMITTED');
+            await expect(page.locator('#album-status')).toContainText(/TRACK 3|MUSIC/);
+            const axe=await new AxeBuilder({page}).analyze();
+            expect(axe.violations.filter(v=>['critical','serious'].includes(v.impact))).toEqual([]);
+            await page.screenshot({path:`artifacts/order010-production-browser/screenshots/${info.project.name}-signal.png`,fullPage:true});
+          });
+          test('remote WebGL fallback remains functional and truthful',async({page},info)=>{
+            await page.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...args){if(kind==='webgl'||kind==='experimental-webgl'||kind==='webgl2')return null;return original.call(this,kind,...args)}});
+            await page.goto('/',{waitUntil:'domcontentloaded'});
+            await expect(page.locator('#freshness')).not.toHaveText(/Loading source state/i,{timeout:15000});
+            await expect(page.locator('#webgl-fallback')).toBeVisible();
+            await expect(page.locator('#model-label')).toContainText('WEBGL 2D FALLBACK');
+            await expect(page.locator('#webgl-fallback')).toContainText('Mission data and receiver controls remain accessible');
+            await page.getByRole('button',{name:/SIGNAL/}).click();
+            await expect(page.locator('#signal-panel')).toBeVisible();
+            await page.screenshot({path:`artifacts/order010-production-browser/screenshots/${info.project.name}-fallback.png`,fullPage:true});
+          });
+          EOF
+      - name: Production API, trust boundary, headers and asset verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/order010-production-browser/api
+          curl --fail --silent --show-error -D artifacts/order010-production-browser/api/root.headers "$PRODUCTION_URL/" -o artifacts/order010-production-browser/api/root.html
+          curl --fail --silent --show-error -D artifacts/order010-production-browser/api/health.headers "$PRODUCTION_URL/api/v1/health" -o artifacts/order010-production-browser/api/health.json
+          curl --fail --silent --show-error "$PRODUCTION_URL/api/v1/voyager/trajectory" -o artifacts/order010-production-browser/api/trajectory.json
+          curl --fail --silent --show-error "$PRODUCTION_URL/api/v1/receiver/snapshot" -o artifacts/order010-production-browser/api/receiver.json
+          curl --fail --silent --show-error "$PRODUCTION_URL/assets/voyager-probe-a.glb" -o artifacts/order010-production-browser/api/model.glb
+          jq -e --arg sha "$DEPLOYED_SHA" '.status=="ok" and .buildSha==$sha and .spiceTrajectory=="crosschecked" and .receiverHub=="sqlite-durable-object" and .costProfile=="USD_0_FREE_PLAN"' artifacts/order010-production-browser/api/health.json >/dev/null
+          jq -e '.crosscheck.pass==true and (.samples|length)>=400' artifacts/order010-production-browser/api/trajectory.json >/dev/null
+          jq -e '.sourceMode=="NO_SOURCE" or .sourceMode=="LOST"' artifacts/order010-production-browser/api/receiver.json >/dev/null
+          echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  artifacts/order010-production-browser/api/model.glb' | sha256sum -c -
+          for hdr in root health; do grep -qi '^x-content-type-options: nosniff' "artifacts/order010-production-browser/api/${hdr}.headers"; grep -qi '^content-security-policy:' "artifacts/order010-production-browser/api/${hdr}.headers"; done
+          grep -qi '^strict-transport-security:' artifacts/order010-production-browser/api/root.headers
+          status="$(curl --silent --show-error -o artifacts/order010-production-browser/api/unsigned-ingest.json -w '%{http_code}' -H 'content-type: application/json' --data '{"schemaVersion":1,"stationId":"unknown","sequence":1,"nonce":"nonce-123456789","softwareSha":"abcdef1","observedAt":"2026-08-07T12:00:00Z","band":{"centerFrequencyHz":8420430000},"snapshot":{}}' "$PRODUCTION_URL/api/v1/receiver/ingest")"
+          test "$status" = 403
+          jq -e '.error.code=="STATION_UNREGISTERED"' artifacts/order010-production-browser/api/unsigned-ingest.json >/dev/null
+          PRODUCTION_URL="$PRODUCTION_URL" node --input-type=module <<'NODE'
+          const u=new URL(process.env.PRODUCTION_URL);u.protocol='wss:';u.pathname='/api/v1/receiver/live';
+          await new Promise((resolve,reject)=>{const ws=new WebSocket(u);const t=setTimeout(()=>reject(new Error('ws timeout')),12000);ws.onmessage=e=>{const data=JSON.parse(String(e.data));if(!['NO_SOURCE','LOST'].includes(data.sourceMode))return reject(new Error(`unexpected ${data.sourceMode}`));clearTimeout(t);ws.close();resolve()};ws.onerror=()=>reject(new Error('ws error'))});
+          console.log('RECEIVER_HUB_WEBSOCKET=PASS');
+          NODE
+      - name: Run remote browser matrix
+        run: npx playwright test --config=playwright.production.config.mjs
+      - name: Music control and truthful autoplay evidence
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import {chromium} from '@playwright/test';import {writeFile,mkdir} from 'node:fs/promises';
+          const browser=await chromium.launch();const page=await browser.newPage();await page.goto(process.env.PRODUCTION_URL,{waitUntil:'domcontentloaded'});await page.locator('#album-play').click();await page.waitForTimeout(6500);const status=await page.locator('#album-status').textContent();if(!/TRACK 3|MUSIC UNAVAILABLE|MUSIC BLOCKED/i.test(status||''))throw new Error(`unexpected music status: ${status}`);const play=await page.locator('#album-play').textContent();const mute=await page.locator('#album-mute').textContent();await page.locator('#album-mute').click();const afterMute=await page.locator('#album-mute').textContent();await mkdir('artifacts/order010-production-browser',{recursive:true});await writeFile('artifacts/order010-production-browser/music.json',JSON.stringify({status,play,muteBefore:mute,muteAfter:afterMute,startTrack:3,startSeconds:1036,target:'https://youtu.be/kr9-QrMhfzY'},null,2));await browser.close();
+          NODE
+      - name: Record browser checkpoint
+        shell: bash
+        run: |
+          jq -n --arg sha "$DEPLOYED_SHA" --arg version "$CLOUDFLARE_VERSION_ID" --arg url "$PRODUCTION_URL" --arg run "$GITHUB_RUN_ID" '{schemaVersion:1,status:"PRODUCTION_BROWSER_PASS",deployedSha:$sha,cloudflareVersionId:$version,productionUrl:$url,runId:$run,desktop:"PASS",mobileChromium:"PASS",mobileWebKit:"PASS",webglFallback:"PASS",accessibility:"PASS",virtualPulse:"PASS_NO_RF",verifiedAt:(now|todateiso8601)}' > artifacts/order010-production-browser/checkpoint.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: order010-production-browser-final
+          path: artifacts/order010-production-browser
+          retention-days: 30

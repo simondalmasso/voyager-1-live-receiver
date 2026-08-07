@@ -1,0 +1,57 @@
+name: CI
+on:
+  push:
+    branches: [main, feat/aud-001-complete-product]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npm run bundle:report
+      - run: npm run verify:data
+      - run: npm run inventory
+      - run: npm install --no-save --package-lock=false wrangler@4.114.0
+      - run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-evidence
+          path: |
+            dist
+            artifacts
+            .wrangler-dry-run
+          retention-days: 14
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save --package-lock=false @playwright/test@1.62.0 @axe-core/playwright@4.12.1
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-evidence
+          path: |
+            playwright-report
+            test-results
+          retention-days: 14
