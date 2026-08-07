@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 await rm('dist',{recursive:true,force:true});
 for(const dir of ['dist/data/fixtures','dist/assets','dist/vendor/loaders','dist/vendor/utils','dist/vendor/draco'])await mkdir(dir,{recursive:true});
 await cp('index.html','dist/index.html');
-for(const f of ['styles.css','app.js','scene.js','signal.js','data.js','audio.js'])await cp(`src/${f}`,`dist/${f}`);
+for(const f of ['styles.css','order010.css','app.js','scene.js','signal.js','data.js','audio.js'])await cp(`src/${f}`,`dist/${f}`);
 await cp('shared/contracts.js','dist/contracts.js');
 await cp('data/fixtures/recorded-authentic-manifest.json','dist/data/fixtures/recorded-authentic-manifest.json');
 for(const f of ['manifest.webmanifest','icon.svg','sw.js'])await cp(f,`dist/${f}`);
