@@ -1,0 +1,60 @@
+name: ORDER013 Visual CI
+on:
+  push:
+    branches: [feat/order-013-nasa-visual-system]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  visual-r3-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24', cache: npm}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Immutable authority guards
+        run: |
+          git merge-base --is-ancestor aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD
+          git diff --quiet aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD -- worker listener-agent shared/contracts.js || { echo 'R3_SCIENCE_OR_BACKEND_MUTATED'; exit 1; }
+          test "$(git rev-parse refs/remotes/origin/main)" = "8cc2d69352847cc3032aaa2cf6cc0bd638475f6a"
+      - run: npm ci
+      - name: Full browser/worker R3 regression + Order013 unit truth
+        run: npm test
+      - name: Listener R3 regression
+        run: |
+          python -m pip install -r listener-agent/requirements.txt
+          PYTHONPATH=listener-agent/src python -m unittest discover -s listener-agent/tests -p 'test_*.py'
+      - name: Build exact candidate
+        env: {SOURCE_BUILD: '${{ github.sha }}'}
+        run: npm run build | tee order013-build.log
+      - name: Static payload measurement
+        run: |
+          python - <<'PY' | tee order013-payload.json
+          import json,os
+          m=json.load(open('dist/build-manifest.json')); total=m['totals']['bytes']; hero=m['files']['assets/voyager-probe-b.glb']['bytes']; print(json.dumps({'totalBytes':total,'firstLoadHistoricalTargetBytes':6000000,'withinHistoricalTarget':total<6000000,'heroHighBytes':hero,'justification':'Three.js + DRACO decoders + two official NASA LODs + same-epoch geometry; high model selected only on capable viewports.'},indent=2))
+          PY
+      - name: Chromium visual gates
+        run: npx playwright install --with-deps chromium && npx playwright test tests/e2e/order013.spec.mjs --project=chromium
+      - name: Secret and license boundary
+        run: |
+          ! grep -RIE '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|sk-[A-Za-z0-9]{20,}|api[_-]?key[[:space:]]*[:=][[:space:]]*[A-Za-z0-9_-]{20,})' --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=dist .
+          test -f LICENSE && test -f THIRD_PARTY_NOTICES.md
+          grep -q 'NASA' THIRD_PARTY_NOTICES.md
+      - name: Evidence snapshot
+        run: |
+          mkdir -p artifacts/order013/ci
+          cp order013-build.log order013-payload.json artifacts/order013/ci/
+          git rev-parse HEAD > artifacts/order013/ci/head-sha.txt
+          git rev-parse HEAD^{tree} > artifacts/order013/ci/tree-sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order013-visual-ci-${{ github.sha }}
+          path: |
+            artifacts/order013/
+            playwright-report/
+            test-results/
+            dist/build-manifest.json
