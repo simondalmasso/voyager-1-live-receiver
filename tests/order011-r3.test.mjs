@@ -8,7 +8,7 @@ async function signedSnapshot(evidence){
   const pair=await crypto.subtle.generateKey({name:'Ed25519'},true,['sign','verify']);
   const publicKey=await crypto.subtle.exportKey('raw',pair.publicKey);
   const now=new Date().toISOString();
-  const snapshot={schemaVersion:1,sourceMode:'TELESCOPE_LIVE_VERIFIED',station:{id:'r3-dish',name:'R3 Dish'},analysis:{state:'INSUFFICIENT_EVIDENCE',confidence:0,expectedFrequencyHz:8420430000},spectrum:{valuesDb:[-80,-70,-60]},evidence,provenance:{truthClass:'TELESCOPE_LIVE_VERIFIED',sourceId:'r3-dish',fetchedAt:now},generatedAt:now};
+  const snapshot={schemaVersion:1,sourceMode:'TELESCOPE_LIVE_VERIFIED',station:{id:'r3-dish',name:'R3 Dish'},analysis:{state:'VERIFIED_CARRIER',confidence:.97,expectedFrequencyHz:8420430000,observedFrequencyHz:8420429999,snrDb:12},spectrum:{valuesDb:[-80,-70,-60]},evidence,provenance:{truthClass:'TELESCOPE_LIVE_VERIFIED',sourceId:'r3-dish',fetchedAt:now},generatedAt:now};
   const body={schemaVersion:1,stationId:'r3-dish',sequence:1,nonce:'r3-nonce-123456789',softwareSha:'abcdef1234abcdef',observedAt:now,band:{centerFrequencyHz:8420430000},snapshot};
   body.signature=b64(await crypto.subtle.sign({name:'Ed25519'},pair.privateKey,new TextEncoder().encode(canonical(body))));
   const env={RECEIVER_STATIONS_JSON:JSON.stringify([{id:'r3-dish',name:'R3 Dish',publicKeyBase64:b64(publicKey),allowedMinHz:8400000000,allowedMaxHz:8500000000}])};
