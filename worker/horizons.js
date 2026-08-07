@@ -10,21 +10,12 @@ export function parseHorizonsVectors(text,fetchedAt=new Date().toISOString()){
   const start=text.indexOf('$$SOE'),end=text.indexOf('$$EOE');if(start<0||end<start)throw new Error('HORIZONS_MARKERS');
   const lines=text.slice(start+5,end).split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   for(const line of lines){
-    const fields=line.split(',').map(x=>x.trim());
-    if(fields.length<8)continue;
-    const dateField=fields.find(x=>/A\.D\.|\d{4}-[A-Z][a-z]{2}-\d{2}/.test(x));
-    const numbers=fields.map(Number);
-    const firstVectorIndex=numbers.findIndex((v,i)=>i>=2&&Number.isFinite(v)&&numbers.slice(i,i+6).every(Number.isFinite));
-    if(firstVectorIndex<0)continue;
-    const pos=numbers.slice(firstVectorIndex,firstVectorIndex+3),vel=numbers.slice(firstVectorIndex+3,firstVectorIndex+6);
-    if(Math.hypot(...pos)<1e8||Math.hypot(...pos)>1e12||Math.hypot(...vel)>100)continue;
+    const fields=line.split(',').map(x=>x.trim()),dateField=fields.find(x=>/A\.D\.|\d{4}-[A-Z][a-z]{2}-\d{2}/.test(x)),numbers=fields.map(Number);
+    const first=numbers.findIndex((v,i)=>i>=2&&Number.isFinite(v)&&numbers.slice(i,i+6).every(Number.isFinite));if(first<0)continue;
+    const pos=numbers.slice(first,first+3),vel=numbers.slice(first+3,first+6);if(Math.hypot(...pos)<1e8||Math.hypot(...pos)>1e12||Math.hypot(...vel)>100)continue;
     const observed=parseHorizonsDate(dateField)||new Date().toISOString();
-    return makeVoyagerState({observedAt:observed,positionKm:pos,velocityKmS:vel,source:{truthClass:'OFFICIAL',sourceId:'jpl-horizons-vectors',sourceUrl:ENDPOINT,observedAt:observed,fetchedAt,transform:'Parsed CSV VECTORS; derived distance/light-time/range-rate in Worker.'}});
+    return makeVoyagerState({observedAt:observed,positionKm:pos,velocityKmS:vel,source:{truthClass:'DERIVED_GEOMETRY',sourceId:'jpl-horizons-vectors',sourceUrl:ENDPOINT,upstreamAuthority:'JPL Horizons',observedAt:observed,fetchedAt,transform:'Official JPL Horizons ICRF geocentric VECTORS; distance/light-time/range-rate/RA/Dec derived locally.'}});
   }
   throw new Error('HORIZONS_VECTOR_NOT_FOUND');
 }
-function parseHorizonsDate(value=''){
-  const m=value.match(/A\.D\.\s*(\d{4})-([A-Z][a-z]{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);if(!m)return null;
-  const month=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(m[2]);if(month<0)return null;
-  return new Date(Date.UTC(+m[1],month,+m[3],+m[4],+m[5],+m[6])).toISOString();
-}
+function parseHorizonsDate(value=''){const m=value.match(/A\.D\.\s*(\d{4})-([A-Z][a-z]{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);if(!m)return null;const month=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(m[2]);if(month<0)return null;return new Date(Date.UTC(+m[1],month,+m[3],+m[4],+m[5],+m[6])).toISOString()}
