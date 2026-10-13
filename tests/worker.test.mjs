@@ -27,3 +27,22 @@ test('API validates observer inputs and emits security headers',async()=>{
   assert.equal(r.status,400);
   assert.equal(SECURITY['x-content-type-options'],'nosniff');
 });
+
+test('DSN Now parser reads nested target attributes and directional signal state',()=>{
+  const xml='<dsn><timestamp>2026-10-13T05:00:00Z</timestamp><station name="MDSCC" friendlyName="Madrid" timeUTC="2026-10-13T05:00:00Z"/><dish name="DSS-63" azimuthAngle="210.0" elevationAngle="35.0" activity="Track"><target name="Voyager 1" id="-31" uplegRange="1" downlegRange="2" rtlt="3"/><downSignal active="true" signalType="data" dataRate="160" frequency="8420" band="X" power="-155" spacecraft="Voyager 1" spacecraftID="-31"/><upSignal active="false" signalType="command" dataRate="0" frequency="8420" band="X" power="-160" spacecraft="Voyager 1" spacecraftID="-31"/></dish></dsn>';
+  const d=parseDsnXml(xml,'2026-10-13T05:00:01Z');
+  assert.equal(d.available,true);
+  assert.equal(d.sourceTimestamp,'2026-10-13T05:00:00Z');
+  assert.equal(d.stations[0].dish,'DSS-63');
+  assert.equal(d.stations[0].downlinkActive,true);
+  assert.equal(d.stations[0].uplinkActive,false);
+  assert.equal(d.stations[0].band,'X');
+  assert.equal(d.provenance.truthClass,'DSN_LIVE_PUBLIC_STATUS');
+  assert.equal(d.provenance.fetchedAt,'2026-10-13T05:00:01Z');
+});
+test('DSN Now does not promote another spacecraft to Voyager 1',()=>{
+  const d=parseDsnXml('<dsn><timestamp>2026-10-13T05:00:00Z</timestamp><dish name="DSS-63"><target name="Voyager 2" id="-32"/></dish></dsn>');
+  assert.equal(d.available,false);
+  assert.equal(d.stations.length,0);
+  assert.equal(d.provenance.truthClass,'UNAVAILABLE');
+});
