@@ -20,8 +20,10 @@ test('state derives distance, radial velocity and Earth direction',()=>{
 });
 
 test('synthetic snapshot remains synthetic and cannot alias telescope live',()=>{
-  const v=validateSignalSnapshot({schemaVersion:1,sourceMode:'SYNTHETIC_TEST',analysis:{state:'VERIFIED_CARRIER'},spectrum:{valuesDb:[-90,-40]},provenance:{truthClass:'SYNTHETIC_TEST',sourceId:'fixture',fetchedAt:'2026-01-01T00:00:00Z'}});
+  const v=validateSignalSnapshot({schemaVersion:1,sourceMode:'SYNTHETIC_TEST',analysis:{state:'CANDIDATE'},spectrum:{valuesDb:[-90,-40]},provenance:{truthClass:'SYNTHETIC_TEST',sourceId:'fixture',fetchedAt:'2026-01-01T00:00:00Z'}});
   assert.equal(v.sourceMode,'SYNTHETIC_TEST');
+  assert.equal(v.analysis.state,'CANDIDATE');
+  assert.notEqual(v.analysis.state,'VERIFIED_CARRIER');
   assert.notEqual(v.provenance.truthClass,'TELESCOPE_LIVE_VERIFIED');
   assert.throws(()=>validateSignalSnapshot({...v,sourceMode:'TELESCOPE_LIVE_VERIFIED'}),/requires verified provenance/);
 });

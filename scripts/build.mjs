@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 await rm('dist',{recursive:true,force:true});
 for(const dir of ['dist/data/fixtures','dist/assets','dist/artifacts/order013','dist/vendor/loaders','dist/vendor/utils','dist/vendor/draco'])await mkdir(dir,{recursive:true});
 await cp('index.html','dist/index.html');
-for(const f of ['styles.css','order010.css','order011.css','app.js','scene.js','signal.js','data.js','audio.js','order011.js','order013.css','order013-core.js','order013-scene.js','order013.js','order013-trajectory.js'])await cp(`src/${f}`,`dist/${f}`);
+for(const f of ['styles.css','order010.css','order011.css','app.js','scene.js','signal.js','data.js','audio.js','order011.js','order013.css','order013-core.js','order013-scene.js','order013.js','order013-trajectory.js','os-voyager.js'])await cp(`src/${f}`,`dist/${f}`);
 await cp('shared/contracts.js','dist/contracts.js');
 await cp('data/fixtures/recorded-authentic-manifest.json','dist/data/fixtures/recorded-authentic-manifest.json');
 await cp('data/order013-ephemeris.json','dist/data/order013-ephemeris.json');
