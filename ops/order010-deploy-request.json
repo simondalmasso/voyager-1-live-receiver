@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "order": 10,
+  "attempt": 5,
+  "action": "CONTINUE_ORDER_010_END_TO_END",
+  "audCommentId": 5214873711,
+  "canonicalBranch": "feat/aud-001-complete-product",
+  "workerName": "voyager-1-live-receiver",
+  "usdBudget": 0,
+  "paymentData": "NO",
+  "rfTx": "NO",
+  "mainMerge": "NO",
+  "requestedAt": "2026-08-07T12:46:00Z",
+  "terminalState": "DEPLOYED_READY_FOR_AUD",
+  "repairBasis": "respect hidden WebGL 2D fallback state; prevent simultaneous procedural and 2D fallback layers"
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-08-07T09:00:00Z",
+  "sources": [
+    {"id":"jpl-horizons-vectors","authority":"JPL","url":"https://ssd.jpl.nasa.gov/api/horizons.api","purpose":"Current geocentric ICRF geometry","access":"Worker fetch","cacheSeconds":600,"fallback":"embedded STALE seed","parser":"worker/horizons.js"},
+    {"id":"naif-voyager-spice","authority":"NASA/JPL NAIF","url":"https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/","purpose":"Reproducible full-mission trajectory","access":"normalized generated artifact; kernels not bundled","fallback":"UNAVAILABLE","evidence":"artifacts/science-evidence/spice-horizons-crosscheck.json"},
+    {"id":"nasa-dsn-now-public-feed","authority":"NASA/JPL","url":"https://eyes.nasa.gov/dsn/data/dsn.xml","purpose":"Opportunistic public DSN activity status","access":"Worker fetch","cacheSeconds":5,"fallback":"UNAVAILABLE","parser":"worker/dsn.js"},
+    {"id":"nasa-voyager-science","authority":"NASA","url":"https://science.nasa.gov/mission/voyager/","purpose":"Mission narrative and instrument status snapshot","access":"versioned snapshot","cacheSeconds":86400,"fallback":"STALE/UNAVAILABLE"},
+    {"id":"pds-voyager1-pws","authority":"NASA PDS","url":"https://pds.nasa.gov/ds-view/pds/viewBundle.jsp?identifier=urn:nasa:pds:voyager1.pws.sa&version=2.0","purpose":"Historical calibrated PWS science","access":"catalog reference","fallback":"UNAVAILABLE"},
+    {"id":"nasa-voyager-model-a","authority":"NASA 3D Resources","url":"https://science.nasa.gov/3d-resources/voyager-probe-a/","purpose":"Primary visual spacecraft model","access":"pinned local GLB","sha256":"7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821","fallback":"project procedural model"},
+    {"id":"verified-receiver-hub","authority":"registered independent receive-only stations","purpose":"Ed25519-signed reduced carrier products","access":"Cloudflare Worker + SQLite Durable Object","rawIqUpload":false,"rfTx":false,"fallback":"NO_SOURCE/LOST"},
+    {"id":"camras-voyager-reception","authority":"CAMRAS","url":"https://www.camras.nl/en/blog/2024/dwingeloo-telescope-receives-signals-from-voyager-1/","purpose":"Independent real reception methodology reference","access":"documentation"},
+    {"id":"seti-ata-voyager-detection","authority":"SETI Institute","url":"https://www.seti.org/news/detecting-voyager-1-with-the-ata/","purpose":"Carrier detection methodology reference","access":"documentation"}
+  ]
+}

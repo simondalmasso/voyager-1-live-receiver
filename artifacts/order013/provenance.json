@@ -1,0 +1,25 @@
+{
+  "schema": "ORDER013_PROVENANCE_V1",
+  "order": 13,
+  "cleanRoom": true,
+  "independentProject": true,
+  "sources": [
+    {"id":"NASA_EYES_SOLAR_SYSTEM","url":"https://eyes.nasa.gov/apps/solar-system/#/sc_voyager_1","role":"observable interaction reference","copiedUI":false},
+    {"id":"NASA_PROBE_A","url":"https://science.nasa.gov/3d-resources/voyager-probe-a/","asset":"assets/voyager-probe-a.glb","sha256":"7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821","role":"HERO_LOW"},
+    {"id":"NASA_PROBE_B","url":"https://science.nasa.gov/3d-resources/voyager-probe-b/","asset":"assets/voyager-probe-b.glb","sha256":"bd86ded828dd3f459293aee4ffc3cd0998d8db67439317c8299650a1174c3289","role":"HERO_HIGH"},
+    {"id":"NASA_VTAD_VOYAGER","url":"https://science.nasa.gov/resource/voyager-3d-model/","role":"controlled comparison candidate, source page only"},
+    {"id":"JPL_HORIZONS","url":"https://ssd.jpl.nasa.gov/api/horizons.api","asset":"data/order013-ephemeris.json","role":"same-epoch ECLIPJ2000 geometry"},
+    {"id":"JPL_APPROX_ORBITS","url":"https://ssd.jpl.nasa.gov/planets/approx_pos.html","role":"orbit-approximation visual reference"},
+    {"id":"THESKYLIVE","url":"https://theskylive.com/3dsolarsystem?obj=voyager1","role":"secondary competitor interaction reference"}
+  ],
+  "truth": {
+    "geometry":"DERIVED_GEOMETRY",
+    "physicalFrame":"ECLIPJ2000",
+    "orbitCurves":"ORBIT_APPROXIMATION",
+    "bodyDisplayRadii":"DISPLAY_RADIUS_EXAGGERATED",
+    "overviewScale":"VOYAGER_DISTANCE_LOG",
+    "earthPointing":"EARTH_POINTING_DERIVED",
+    "spacecraftAttitudeClaim":"NOT_ASSERTED_WITHOUT_CK",
+    "rfUplink":"NOT_IMPLEMENTED"
+  }
+}

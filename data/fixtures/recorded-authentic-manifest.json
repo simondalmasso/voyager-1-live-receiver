@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "available": false,
+  "reason": "No redistributable authentic Voyager 1 IQ capture with verified license and stable checksum was incorporated. The SigMF adapter accepts operator-supplied captures.",
+  "requiredFields": ["sourceUrl", "observatory", "capturedAt", "centerFrequencyHz", "sampleRateHz", "sha256", "license"]
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-08-05T00:00:00Z",
+  "sourceUrl": "https://science.nasa.gov/mission/voyager/where-are-voyager-1-and-voyager-2-now/",
+  "instruments": [
+    {"id":"MAG","state":"ON"},
+    {"id":"PWS","state":"ON"},
+    {"id":"CRS","state":"OFF_POWER","effectiveAt":"2025-02-25"},
+    {"id":"LECP","state":"OFF_POWER","effectiveAt":"2026-04-17"},
+    {"id":"PLS","state":"OFF_DEGRADED","effectiveAt":"2007-02-01"},
+    {"id":"ISS","state":"OFF_POWER","effectiveAt":"1990-02-14"}
+  ]
+}

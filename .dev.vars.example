@@ -1,0 +1,3 @@
+# Optional. Public demo needs no secrets.
+LISTENER_PUBLIC_URL=http://127.0.0.1:8765
+LISTENER_ALLOWED_ORIGIN=http://127.0.0.1:4173

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "frame": "J2000_ICRF_HELIOCENTRIC",
+  "units": "visual-scaled",
+  "source": {"type":"NARRATIVE_CONTROL_POINTS","truthClass":"INTERPOLATED"},
+  "scaleDisclosure": "This small path is for local rendering only. Exact numeric mission state comes from Horizons.",
+  "samples": [
+    ["1977-09-05T12:56:00Z",0,0,0],
+    ["1979-03-05T12:00:00Z",4.2,0.4,0.2],
+    ["1980-11-12T23:46:00Z",7.1,1.2,0.5],
+    ["1990-02-14T00:00:00Z",10.4,2.2,1.4],
+    ["2004-12-16T00:00:00Z",14.6,3.8,2.2],
+    ["2012-08-25T00:00:00Z",18.2,5.0,3.1],
+    ["2026-08-05T00:00:00Z",23.5,7.2,4.4]
+  ]
+}

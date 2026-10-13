@@ -1,0 +1,27 @@
+name: Listener CI
+on:
+  push:
+    branches: [main, feat/aud-001-complete-product]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  listener:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: mkdir -p artifacts
+      - run: PYTHONPATH=listener-agent/src python -m unittest discover -s listener-agent/tests -v
+      - run: PYTHONPATH=listener-agent/src python -m voyager_listener.cli doctor > artifacts/listener-doctor.json
+      - run: PYTHONPATH=listener-agent/src python -m voyager_listener.cli synth --output /tmp/voyager.sigmf-meta > artifacts/synthetic-manifest.json
+      - run: PYTHONPATH=listener-agent/src python -m voyager_listener.cli analyze /tmp/voyager.sigmf-meta --expected-frequency-hz 8420430048 --drift-hz-s 0.2 > artifacts/detector-result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: listener-evidence
+          path: artifacts/*.json
+          retention-days: 14

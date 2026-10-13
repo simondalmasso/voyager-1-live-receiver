@@ -1,0 +1,95 @@
+name: ORDER011 Full Gate
+on:
+  push:
+    branches: [feat/order-011-deep-space-lab]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run verify:data
+      - run: npm run build
+      - run: npm run bundle:report
+      - run: npm run inventory
+      - name: Wrangler dry-run only
+        run: npx --yes wrangler@4.114.0 deploy --dry-run --outdir .wrangler-dry-run
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order011-core-${{ github.sha }}
+          path: |
+            artifacts
+            dist/build-manifest.json
+  listener:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e ./listener-agent
+      - run: python -m unittest discover -s listener-agent/tests -v
+      - run: voyager-listener doctor
+      - name: Verify retained SPICE/Horizons geometry evidence
+        run: voyager-science verify-geometry
+      - run: voyager-science evidence-fixture --output artifacts/order011-evidence.zip --verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: order011-listener-${{ github.sha }}
+          path: |
+            artifacts/order011-evidence.zip
+            artifacts/science-evidence/spice-horizons-crosscheck.json
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save @playwright/test@1.62.0 @axe-core/playwright@4.12.1
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run build
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: order011-e2e-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Receive-only, cost, secret and license invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='security.yml' --exclude='order011-ci.yml' --exclude='order010-deploy.yml' --exclude='order011-deploy.yml' '(sk-[A-Za-z0-9_-]{20,}|CLOUDFLARE_API_TOKEN=.+|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .
+          ! grep -RInE --exclude-dir=.git --exclude='*.md' --exclude='order011-ci.yml' '(RF_UPLINK_ENABLED|TRANSMIT_TO_DSN|SEND_COMMAND_TO_VOYAGER)' .
+          grep -RIn 'rawIqToCloud:false' worker/lab.js
+          grep -RIn "costProfile:'USD_0'" worker/lab.js
+          node scripts/inventory.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high

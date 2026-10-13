@@ -1,0 +1,229 @@
+name: ORDER013 Terminal Deploy
+on:
+  push:
+    branches: [feat/order-013-nasa-visual-system]
+    paths: [ops/order013-final-request.json]
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  deployments: write
+  pull-requests: read
+env:
+  AUD_COMMENT_ID: 5222234625
+  BASELINE_SHA: aaf686e33de7df600c066caca0b0d20cbf80c9d4
+  BASELINE_TREE: 1d5a06c0446b5d35ffc289fe06653b042df9963d
+  MAIN_EXPECTED: 8cc2d69352847cc3032aaa2cf6cc0bd638475f6a
+  R3_ROLLBACK_VERSION: e96f81ab-0c8a-4c19-b280-ee2af5c13468
+  PRODUCTION_URL: https://voyager-1-live-receiver.simondalmasso44.workers.dev
+  USD_BUDGET: "0"
+  PAYMENT_DATA: "NO"
+  RF_TX: "NO"
+  MAIN_MERGE: "NO"
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+jobs:
+  terminal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24', cache: npm}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Authority and immutable R3 guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.order==13 and .action=="RESUME_ORDER_013_FROM_REMOTE" and .audCommentId==5222234625 and .baselineSha=="aaf686e33de7df600c066caca0b0d20cbf80c9d4" and .rollbackVersion=="e96f81ab-0c8a-4c19-b280-ee2af5c13468" and .mainExpected=="8cc2d69352847cc3032aaa2cf6cc0bd638475f6a" and .usdBudget==0 and .paymentData=="NO" and .rfTx=="NO" and .mainMerge=="NO"' ops/order013-final-request.json >/dev/null
+          git merge-base --is-ancestor "$BASELINE_SHA" "$GITHUB_SHA"
+          test "$(git rev-parse "$BASELINE_SHA^{tree}")" = "$BASELINE_TREE"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$MAIN_EXPECTED"
+          git diff --quiet "$BASELINE_SHA" "$GITHUB_SHA" -- listener-agent shared/contracts.js || { echo 'R3_LISTENER_OR_CONTRACT_MUTATED'; exit 31; }
+          unexpected="$(git diff --name-only "$BASELINE_SHA" "$GITHUB_SHA" -- worker | grep -Ev "^(worker/dsn[.]js|worker/index[.]js)\$" || true)"
+          test -z "$unexpected" || { echo "$unexpected"; echo 'R3_BACKEND_MUTATION_OUTSIDE_DSNNOW_PARSER_OR_CSP'; exit 31; }
+          if ! git diff --quiet "$BASELINE_SHA" "$GITHUB_SHA" -- worker/index.js; then
+            git show "$BASELINE_SHA:worker/index.js" | sed -E 's/^const CSP=.*/const CSP="__ORDER013_CSP_POLICY__";/' > /tmp/order013-worker-baseline.js
+            sed -E 's/^const CSP=.*/const CSP="__ORDER013_CSP_POLICY__";/' worker/index.js > /tmp/order013-worker-candidate.js
+            diff -u /tmp/order013-worker-baseline.js /tmp/order013-worker-candidate.js
+            grep -Fq "worker-src 'self' blob:" worker/index.js
+            grep -Fq "'wasm-unsafe-eval'" worker/index.js
+          fi
+          test "$USD_BUDGET" = 0 && test "$PAYMENT_DATA" = NO && test "$RF_TX" = NO && test "$MAIN_MERGE" = NO
+          test -n "${CLOUDFLARE_API_TOKEN:-}" && test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+          mkdir -p artifacts/order013-final/{predeploy,production,security,performance}
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v1/health?o13pre=$RANDOM" > artifacts/order013-final/predeploy/health.json
+          jq -e --arg sha "$BASELINE_SHA" '.status=="ok" and .buildSha==$sha' artifacts/order013-final/predeploy/health.json >/dev/null
+      - name: Install and exact-SHA local gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --no-save --package-lock=false wrangler@4.114.0 @playwright/test@1.62.0 @axe-core/playwright@4.12.1
+          python -m pip install -e listener-agent
+          npm test | tee artifacts/order013-final/node-tests.log
+          npm run lint
+          npm run format:check
+          npm run verify:data
+          npm run inventory
+          PYTHONPATH=listener-agent/src python -m unittest discover -s listener-agent/tests -p 'test_*.py' -v 2>&1 | tee artifacts/order013-final/listener-tests.log
+          npm run build | tee artifacts/order013-final/build.log
+          npm run bundle:report
+          cp dist/build-manifest.json artifacts/order013-final/build-manifest.json
+          cp artifacts/order013/model-comparison.json artifacts/order013-final/model-comparison.json
+          cp artifacts/order013/provenance.json artifacts/order013-final/provenance.json
+          cp data/order013-ephemeris.json artifacts/order013-final/ephemeris.json
+          jq -e '.selectedHeroHigh=="PROBE_B" and .heroLow=="PROBE_A"' artifacts/order013-final/model-comparison.json >/dev/null
+          jq -e '.frame=="ECLIPJ2000" and .source=="JPL_HORIZONS" and (.bodies|keys|length)==10' artifacts/order013-final/ephemeris.json >/dev/null
+          jq -e '.truth.rfUplink=="NOT_IMPLEMENTED" and .truth.earthPointing=="EARTH_POINTING_DERIVED"' artifacts/order013-final/provenance.json >/dev/null
+          jq -e '.totals.bytes < 6000000' artifacts/order013-final/build-manifest.json >/dev/null
+      - name: Retain Wrangler dry-run
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/order013-final/wrangler-dry-run
+          npx wrangler deploy --dry-run --outdir artifacts/order013-final/wrangler-dry-run | tee artifacts/order013-final/wrangler-dry-run.log
+          find artifacts/order013-final/wrangler-dry-run -type f -print0 | sort -z | xargs -0 sha256sum > artifacts/order013-final/wrangler-dry-run.sha256
+          test -s artifacts/order013-final/wrangler-dry-run.sha256
+      - name: Require exact-SHA CI security and CodeQL
+        env: {GH_TOKEN: "${{ github.token }}"}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required='["CI","Listener CI","Data Verify","Security","ORDER013 Visual CI"]'
+          ok=0
+          for i in $(seq 1 120); do
+            runs="$(curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100")"
+            printf '%s\n' "$runs" > artifacts/order013-final/security/workflow-runs.json
+            good="$(printf '%s' "$runs" | jq --argjson req "$required" '[.workflow_runs[]|select(.name as $n|$req|index($n))|select(.status=="completed" and .conclusion=="success")|.name]|unique|length')"
+            bad="$(printf '%s' "$runs" | jq --argjson req "$required" '[.workflow_runs[]|select(.name as $n|$req|index($n))|select(.status=="completed" and .conclusion!="success")]|length')"
+            test "$bad" = 0 || { echo EXACT_SHA_REQUIRED_WORKFLOW_FAILED; exit 41; }
+            if test "$good" = 5; then ok=1; break; fi
+            sleep 5
+          done
+          test "$ok" = 1
+          codeql=0
+          for i in $(seq 1 60); do
+            checks="$(curl --fail --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")"
+            printf '%s\n' "$checks" > artifacts/order013-final/security/check-runs.json
+            if printf '%s' "$checks" | jq -e '[.check_runs[]|select(.name=="CodeQL")]|length>0 and all(.[]; .status=="completed" and (.conclusion=="success" or .conclusion=="neutral" or .conclusion=="skipped") and ((.output.annotations_count//0)==0))' >/dev/null; then codeql=1; break; fi
+            sleep 5
+          done
+          test "$codeql" = 1
+      - name: Deploy exact Order013 SHA
+        id: cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --var "BUILD_SHA:$GITHUB_SHA" 2>&1 | tee artifacts/order013-final/cloudflare-deploy.txt
+          version="$(grep -Eio 'Version ID:?[[:space:]]*[0-9a-f-]{20,}' artifacts/order013-final/cloudflare-deploy.txt | tail -1 | grep -Eo '[0-9a-f-]{20,}' || true)"
+          test -n "$version"
+          echo "version_id=$version" >> "$GITHUB_OUTPUT"
+      - name: Production API and provenance black-box
+        shell: bash
+        run: |
+          set -euo pipefail
+          streak=0
+          for i in $(seq 1 90); do
+            probe="$i-$RANDOM"; h=0;c=0
+            if curl --fail --silent --show-error --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v1/health?o13=$probe" -o artifacts/order013-final/production/health.json && jq -e --arg sha "$GITHUB_SHA" '.status=="ok" and .buildSha==$sha and .costProfile=="USD_0_FREE_PLAN"' artifacts/order013-final/production/health.json >/dev/null; then h=1; fi
+            if curl --fail --silent --show-error --max-time 20 -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v2/lab/capabilities?o13=$probe" -o artifacts/order013-final/production/capabilities.json && jq -e '.evidence.readiness=="FAIL_CLOSED_LISTENER_STATUS_MANIFEST_AND_MISSING" and .canonicalIQBus.rawIqToCloud==false and .receiveOnly==true' artifacts/order013-final/production/capabilities.json >/dev/null; then c=1; fi
+            if test "$h" = 1 && test "$c" = 1; then streak=$((streak+1)); else streak=0; fi
+            test "$streak" -lt 3 || break
+            sleep 2
+          done
+          test "$streak" -ge 3
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v1/dsn/voyager-1?o13=$RANDOM" -o artifacts/order013-final/production/dsn-now.json
+          jq -e '.schemaVersion==1 and .provenance.sourceId=="nasa-dsn-now-public-feed" and (.available|type=="boolean") and ((.available==true and .provenance.truthClass=="DSN_LIVE_PUBLIC_STATUS") or (.available==false and .provenance.truthClass=="UNAVAILABLE"))' artifacts/order013-final/production/dsn-now.json >/dev/null
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/os-voyager.js?o13=$RANDOM" -o artifacts/order013-final/production/os-voyager.js
+          grep -q 'NO AUTHORIZED CHANNEL' artifacts/order013-final/production/os-voyager.js
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v2/lab/evidence?o13=$RANDOM" -o artifacts/order013-final/production/evidence.json
+          jq -e '.status=="NOT_READY" and (.missing|index("listenerEvidenceManifest"))!=null and (.manifest|not)' artifacts/order013-final/production/evidence.json >/dev/null
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/data/order013-ephemeris.json?o13=$RANDOM" -o artifacts/order013-final/production/ephemeris.json
+          jq -e '.epoch=="2026-08-07T21:00:00Z" and .frame=="ECLIPJ2000" and .source=="JPL_HORIZONS" and (.bodies|keys|length)==10' artifacts/order013-final/production/ephemeris.json >/dev/null
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/artifacts/order013/model-comparison.json?o13=$RANDOM" -o artifacts/order013-final/production/model-comparison.json
+          jq -e '.selectedHeroHigh=="PROBE_B" and .heroLow=="PROBE_A"' artifacts/order013-final/production/model-comparison.json >/dev/null
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/artifacts/order013/provenance.json?o13=$RANDOM" -o artifacts/order013-final/production/provenance.json
+          jq -e '.cleanRoom==true and .truth.geometry=="DERIVED_GEOMETRY" and .truth.rfUplink=="NOT_IMPLEMENTED"' artifacts/order013-final/production/provenance.json >/dev/null
+          curl --fail --silent --show-error "$PRODUCTION_URL/assets/voyager-probe-a.glb?o13=$RANDOM" -o artifacts/order013-final/production/probe-a.glb
+          curl --fail --silent --show-error "$PRODUCTION_URL/assets/voyager-probe-b.glb?o13=$RANDOM" -o artifacts/order013-final/production/probe-b.glb
+          echo '7cf8eefb5a0fca9e4e1b0d1e51c37433124169183e5dbfd2d8034af902311821  artifacts/order013-final/production/probe-a.glb' | sha256sum -c -
+          echo 'bd86ded828dd3f459293aee4ffc3cd0998d8db67439317c8299650a1174c3289  artifacts/order013-final/production/probe-b.glb' | sha256sum -c -
+          fresh=0
+          for i in $(seq 1 20); do
+            if curl --fail --silent --show-error --max-time 30 "$PRODUCTION_URL/api/v2/observation-window?lat=-31.4&lon=-64.2&elevation=500&minElevationDeg=-90&durationMinutes=30&stepMinutes=15&o13=$i-$RANDOM" -o artifacts/order013-final/production/window.json && jq -e '.predictionFreshness=="HORIZONS_OBSERVER_FRESH" and .rfPredictionReady==true' artifacts/order013-final/production/window.json >/dev/null; then fresh=1; break; fi
+            sleep 3
+          done
+          test "$fresh" = 1
+      - name: Production immersive visual performance and accessibility audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRODUCTION_URL="$PRODUCTION_URL" node --input-type=module <<'NODE'
+          import {chromium} from '@playwright/test';
+          import AxeBuilder from '@axe-core/playwright';
+          import fs from 'node:fs';
+          const browser=await chromium.launch({headless:true});
+          const viewports=[[360,800],[390,844],[412,915],[844,390],[1280,720],[1440,900],[1920,720]];
+          const audits=[];
+          for(const [width,height] of viewports){
+            const page=await browser.newPage({viewport:{width,height}});
+            await page.goto(`${process.env.PRODUCTION_URL}/?o13prod=${width}x${height}-${Date.now()}`,{waitUntil:'networkidle'});
+            await page.waitForFunction(()=>window.__order013?.getAudit?.().commonEpochFrame===true,{timeout:30000});
+            await page.waitForFunction(()=>window.__order013?.getAudit?.().truth==='NASA_OFFICIAL_GLB',{timeout:30000});
+            await page.waitForTimeout(900);
+            const audit=await page.evaluate(()=>window.__order013.getAudit());
+            const expected=width<520?'/assets/voyager-probe-a.glb':'/assets/voyager-probe-b.glb';
+            if(audit.productionModelActuallyLoaded!==expected||audit.fallbackUsed)throw new Error(`model ${width}x${height}: ${JSON.stringify(audit)}`);
+            if(!Number.isFinite(audit.modelLoadMs)||audit.modelLoadMs<=0||audit.modelLoadMs>8000||audit.frameMsP95>33.4||audit.drawCalls>1000)throw new Error(`performance budget ${width}x${height}: ${JSON.stringify(audit)}`);
+            if(audit.commonEpochFrame!==true)throw new Error('common epoch/frame false');
+            const ui=await page.evaluate(()=>{const qs=['.o13-wordmark','.o13-truth','.o13-mode-status','.o13-nav'];let area=0;for(const q of qs){const r=document.querySelector(q)?.getBoundingClientRect();if(r)area+=r.width*r.height}return {ratio:area/(innerWidth*innerHeight),overflow:document.documentElement.scrollWidth>innerWidth||document.documentElement.scrollHeight>innerHeight,modes:[...document.querySelectorAll('[data-o13-mode]')].map(x=>x.dataset.o13Mode)} });
+            if(ui.ratio>=.10||ui.overflow)throw new Error(`viewport contract ${width}x${height}: ${JSON.stringify(ui)}`);
+            if(JSON.stringify(ui.modes)!==JSON.stringify(['FLIGHT','SOLAR_SYSTEM','DISTANCE','LOOK_BACK_HOME','MISSION_TRAJECTORY','SIGNAL_LAB','OS_VOYAGER']))throw new Error('navigation contract');
+            await page.getByRole('button',{name:'SOLAR SYSTEM'}).click();await page.waitForTimeout(300);const solar=await page.evaluate(()=>window.__order013.getAudit());if(solar.bodyCount!==10||solar.scaleMode!=='VOYAGER_DISTANCE_LOG')throw new Error('solar contract');
+            await page.getByRole('button',{name:'DISTANCE'}).click();const distance=await page.locator('#o13-distance-values').innerText();if(!/Astronomical units/.test(distance)||!/Range rate/.test(distance))throw new Error('distance contract');
+            await page.getByRole('button',{name:'LOOK BACK HOME'}).click();if(!/one-way light/i.test(await page.locator('#o13-lookback-copy').innerText()))throw new Error('look-back contract');
+            await page.getByRole('button',{name:'MISSION TRAJECTORY'}).click();await page.waitForFunction(()=>window.__order013?.trajectoryAudit?.status==='READY',{timeout:15000});
+            const trajectory=await page.evaluate(()=>window.__order013.trajectoryAudit);if(trajectory.truthClass!=='DERIVED_GEOMETRY'||trajectory.points<2)throw new Error('trajectory contract');
+            await page.getByRole('button',{name:'SIGNAL LAB'}).click();if(!(await page.locator('#lab-drawer').isVisible()))throw new Error('signal lab disclosure');await page.keyboard.press('Escape');
+            await page.getByRole('button',{name:'OS VOYAGER'}).click();await page.waitForFunction(()=>{const p=document.querySelector('#os-voyager-panel');return p&&!p.hidden},{timeout:10000});await page.waitForFunction(()=>['DSN_LIVE_PUBLIC_STATUS','UNAVAILABLE'].includes(document.querySelector('#osv-dsn-truth')?.textContent),{timeout:10000});const ops=await page.evaluate(()=>({uplink:document.querySelector('#osv-uplink-state')?.textContent,dsn:document.querySelector('#osv-dsn-truth')?.textContent,readOnly:document.querySelector('#os-voyager-panel')?.textContent.includes('cannot send commands')}));if(!/DISABLED/.test(ops.uplink||'')||!ops.readOnly||!['DSN_LIVE_PUBLIC_STATUS','UNAVAILABLE'].includes(ops.dsn))throw new Error('OS Voyager truth boundary '+JSON.stringify(ops));await page.keyboard.press('Escape');
+            const axe=await new AxeBuilder({page}).analyze();const serious=axe.violations.filter(v=>['serious','critical'].includes(v.impact));if(serious.length)throw new Error(`a11y ${width}x${height}: ${serious.map(v=>v.id).join(',')}`);
+            audits.push({width,height,audit,ui,trajectory,a11yViolations:axe.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.length}))});
+            await page.screenshot({path:`artifacts/order013-final/production/${width}x${height}.png`});
+            await page.close();
+          }
+          fs.writeFileSync('artifacts/order013-final/performance/browser-audit.json',JSON.stringify(audits,null,2));
+          await browser.close();
+          NODE
+      - name: Write terminal manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          find artifacts/order013-final -type f ! -name terminal-files.sha256 -print0 | sort -z | xargs -0 sha256sum > artifacts/order013-final/terminal-files.sha256
+          jq -n --arg sha "$GITHUB_SHA" --arg tree "$(git rev-parse HEAD^{tree})" --arg version '${{ steps.cloudflare.outputs.version_id }}' --arg url "$PRODUCTION_URL" '{status:"DEPLOYED_READY_FOR_AUD_013",auditHandoff:"READY",headSha:$sha,treeSha:$tree,productionVersion:$version,productionUrl:$url,baselineR3Preserved:"PASS",nasaOfficialModel:"PASS",solarSystemSameEpoch:"PASS",distanceToolPhysical:"PASS",lookBackHomeDerived:"PASS",missionTrajectory:"PASS",persistentClearArea:"PASS",hardViewports:"PASS",performanceBudget:"PASS",accessibility:"PASS",security:"PASS",codeql:"PASS_ZERO_ANNOTATIONS",costIncurredUsd:0,paymentDataUsed:"NO",rfUplink:"NOT_IMPLEMENTED",mainMerge:"NO"}' > artifacts/order013-final/checkpoint.json
+      - name: Roll back exact accepted R3 on material failure
+        if: failure() && steps.cloudflare.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler rollback "$R3_ROLLBACK_VERSION" --message "ORDER013 automatic rollback to accepted R3 after material verification failure"
+      - name: Record verified production deployment
+        if: success()
+        env: {GH_TOKEN: "${{ github.token }}"}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployment="$(curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'content-type: application/json' --data "$(jq -nc --arg ref "$GITHUB_SHA" '{ref:$ref,environment:"production",auto_merge:false,required_contexts:[],description:"ORDER013 NASA-grade immersive visual system"}')" "https://api.github.com/repos/$GITHUB_REPOSITORY/deployments")"
+          id="$(printf '%s' "$deployment" | jq -r '.id')"
+          printf '%s\n' "$deployment" > artifacts/order013-final/github-deployment.json
+          curl --fail --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' -H 'content-type: application/json' --data "$(jq -nc --arg url "$PRODUCTION_URL" '{state:"success",environment_url:$url,description:"ORDER013 production verification passed",auto_inactive:true}')" "https://api.github.com/repos/$GITHUB_REPOSITORY/deployments/$id/statuses" > artifacts/order013-final/github-deployment-status.json
+      - name: Upload complete Order013 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order013-final-${{ github.sha }}
+          path: artifacts/order013-final
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,41 @@
+name: ORDER010 Fallback Truth Fix
+on:
+  push:
+    branches: [feat/aud-001-complete-product]
+    paths: ['.github/workflows/order010-fallback-fix.yml']
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch fallback truth and deployment propagation tolerance
+        shell: python
+        run: |
+          from pathlib import Path
+          app=Path('src/app.js')
+          text=app.read_text()
+          old="catch(error){$('space-canvas').hidden=true;$('webgl-fallback').hidden=false;$('camera-label').textContent='STATIC FALLBACK';modelState={truth:'WEBGL_2D_FALLBACK',error:String(error)}}"
+          new="catch(error){$('space-canvas').hidden=true;$('webgl-fallback').hidden=false;$('camera-label').textContent='STATIC FALLBACK';$('model-label').textContent='MODEL · WEBGL 2D FALLBACK';modelState={truth:'WEBGL_2D_FALLBACK',error:String(error)}}"
+          if old not in text: raise SystemExit('expected fallback block not found')
+          app.write_text(text.replace(old,new,1))
+          deploy=Path('.github/workflows/order010-deploy.yml')
+          text=deploy.read_text()
+          old="for i in $(seq 1 15); do\n            if curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \"$PRODUCTION_URL/api/v1/health\" -o artifacts/order010/production/health.json; then break; fi\n            sleep 2\n          done"
+          new="for i in $(seq 1 40); do\n            if curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \"$PRODUCTION_URL/api/v1/health\" -o artifacts/order010/production/health.json; then break; fi\n            sleep 3\n          done"
+          if old not in text: raise SystemExit('expected production propagation loop not found')
+          deploy.write_text(text.replace(old,new,1))
+      - name: Commit exact repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name order010-arq
+          git config user.email actions@users.noreply.github.com
+          git add src/app.js .github/workflows/order010-deploy.yml
+          git diff --cached --check
+          git commit -m 'fix(order010): finalize truthful WebGL fallback'
+          git push origin HEAD:feat/aud-001-complete-product

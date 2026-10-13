@@ -1,0 +1,15 @@
+{
+  "order": 13,
+  "action": "RESUME_ORDER_013_FROM_REMOTE",
+  "audCommentId": 5222234625,
+  "baselineSha": "aaf686e33de7df600c066caca0b0d20cbf80c9d4",
+  "rollbackVersion": "e96f81ab-0c8a-4c19-b280-ee2af5c13468",
+  "mainExpected": "8cc2d69352847cc3032aaa2cf6cc0bd638475f6a",
+  "usdBudget": 0,
+  "paymentData": "NO",
+  "rfTx": "NO",
+  "mainMerge": "NO",
+  "targetState": "DEPLOYED_READY_FOR_AUD_013",
+  "attempt": 12,
+  "requestedAt": "2026-10-13T10:24:14.860Z"
+}

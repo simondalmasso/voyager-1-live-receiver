@@ -1,0 +1,14 @@
+{
+  "name": "Voyager Link",
+  "short_name": "Voyager Link",
+  "description": "Immersive Voyager 1 mission and verified receive-only signal laboratory.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#03050a",
+  "theme_color": "#05070b",
+  "orientation": "any",
+  "icons": [
+    {"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
