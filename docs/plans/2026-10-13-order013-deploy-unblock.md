@@ -94,7 +94,7 @@ Expected: Chromium, mobile Chromium, and mobile WebKit complete with no failures
 
 **Interfaces:**
 - Consumes: baseline commit `aaf686e33de7df600c066caca0b0d20cbf80c9d4`, fixed `main` SHA, and the exact-commit Actions gate.
-- Produces: a guarded attempt 5 and a CSP-only exception that rejects any other `worker/index.js` changes.
+- Produces: a guarded attempt 6 and a CSP-only exception that rejects any other `worker/index.js` changes.
 
 - [ ] **Step 1: Restrict the Worker exception**
 
@@ -104,7 +104,7 @@ Allow `worker/index.js` only when replacing its CSP line with a placeholder make
 
 Keep the listener/contracts immutability checks, exact main SHA, no-merge request, zero budget, and RF-transmit prohibition unchanged.
 
-- [ ] **Step 3: Trigger guarded deployment attempt 5**
+- [ ] **Step 3: Trigger guarded deployment attempt 6**
 
 Update only the request attempt and timestamp. Do not deploy directly, skip CI, merge to `main`, or change Cloudflare secrets.
 

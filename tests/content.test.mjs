@@ -12,6 +12,6 @@ test('HTML and Worker CSP permit local Draco workers and WebAssembly decoding',a
   assert.ok(meta,'HTML CSP meta policy exists');
   assert.ok(header,'Worker CSP response policy exists');
   assert.equal(meta,header,'HTML and response CSP policies must stay identical');
-  assert.match(meta,/(?:^|;\\s*)worker-src 'self' blob:/);
+  assert.match(meta,/(?:^|;\s*)worker-src 'self' blob:/);
   assert.match(meta,/script-src[^;]*'wasm-unsafe-eval'/);
 });

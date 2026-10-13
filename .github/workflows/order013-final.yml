@@ -42,7 +42,15 @@ jobs:
           test "$(git rev-parse "$BASELINE_SHA^{tree}")" = "$BASELINE_TREE"
           test "$(git rev-parse refs/remotes/origin/main)" = "$MAIN_EXPECTED"
           git diff --quiet "$BASELINE_SHA" "$GITHUB_SHA" -- listener-agent shared/contracts.js || { echo 'R3_LISTENER_OR_CONTRACT_MUTATED'; exit 31; }
-          unexpected="$(git diff --name-only "$BASELINE_SHA" "$GITHUB_SHA" -- worker | grep -Ev '^(worker/dsn\.js|worker/index\.js)
+          unexpected="$(git diff --name-only "$BASELINE_SHA" "$GITHUB_SHA" -- worker | grep -Ev "^(worker/dsn[.]js|worker/index[.]js)\$" || true)"
+          test -z "$unexpected" || { echo "$unexpected"; echo 'R3_BACKEND_MUTATION_OUTSIDE_DSNNOW_PARSER_OR_CSP'; exit 31; }
+          if ! git diff --quiet "$BASELINE_SHA" "$GITHUB_SHA" -- worker/index.js; then
+            git show "$BASELINE_SHA:worker/index.js" | sed -E 's/^const CSP=.*/const CSP="__ORDER013_CSP_POLICY__";/' > /tmp/order013-worker-baseline.js
+            sed -E 's/^const CSP=.*/const CSP="__ORDER013_CSP_POLICY__";/' worker/index.js > /tmp/order013-worker-candidate.js
+            diff -u /tmp/order013-worker-baseline.js /tmp/order013-worker-candidate.js
+            grep -Fq "worker-src 'self' blob:" worker/index.js
+            grep -Fq "'wasm-unsafe-eval'" worker/index.js
+          fi
           test "$USD_BUDGET" = 0 && test "$PAYMENT_DATA" = NO && test "$RF_TX" = NO && test "$MAIN_MERGE" = NO
           test -n "${CLOUDFLARE_API_TOKEN:-}" && test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
           mkdir -p artifacts/order013-final/{predeploy,production,security,performance}

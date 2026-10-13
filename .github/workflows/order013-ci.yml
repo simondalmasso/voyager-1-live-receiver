@@ -20,7 +20,15 @@ jobs:
         run: |
           git merge-base --is-ancestor aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD
           git diff --quiet aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD -- listener-agent shared/contracts.js || { echo 'R3_LISTENER_OR_CONTRACT_MUTATED'; exit 1; }
-          unexpected="$(git diff --name-only aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD -- worker | grep -Ev '^(worker/dsn\.js|worker/index\.js)
+          unexpected="$(git diff --name-only aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD -- worker | grep -Ev "^(worker/dsn[.]js|worker/index[.]js)\$" || true)"
+          test -z "$unexpected" || { echo "$unexpected"; echo 'R3_BACKEND_MUTATION_OUTSIDE_DSNNOW_PARSER_OR_CSP'; exit 1; }
+          if ! git diff --quiet aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD -- worker/index.js; then
+            git show aaf686e33de7df600c066caca0b0d20cbf80c9d4:worker/index.js | sed -E 's/^const CSP=.*/const CSP="__ORDER013_CSP_POLICY__";/' > /tmp/order013-worker-baseline.js
+            sed -E 's/^const CSP=.*/const CSP="__ORDER013_CSP_POLICY__";/' worker/index.js > /tmp/order013-worker-candidate.js
+            diff -u /tmp/order013-worker-baseline.js /tmp/order013-worker-candidate.js
+            grep -Fq "worker-src 'self' blob:" worker/index.js
+            grep -Fq "'wasm-unsafe-eval'" worker/index.js
+          fi
           test "$(git rev-parse refs/remotes/origin/main)" = "8cc2d69352847cc3032aaa2cf6cc0bd638475f6a"
       - run: npm ci
       - name: Full browser/worker R3 regression + Order013 unit truth
