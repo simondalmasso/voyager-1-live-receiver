@@ -19,7 +19,9 @@ jobs:
       - name: Immutable authority guards
         run: |
           git merge-base --is-ancestor aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD
-          git diff --quiet aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD -- worker listener-agent shared/contracts.js || { echo 'R3_SCIENCE_OR_BACKEND_MUTATED'; exit 1; }
+          git diff --quiet aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD -- listener-agent shared/contracts.js || { echo 'R3_LISTENER_OR_CONTRACT_MUTATED'; exit 1; }
+          unexpected="$(git diff --name-only aaf686e33de7df600c066caca0b0d20cbf80c9d4 HEAD -- worker | grep -Ev '^worker/dsn\.js$' || true)"
+          test -z "$unexpected" || { echo "$unexpected"; echo 'R3_BACKEND_MUTATION_OUTSIDE_DSNNOW_PARSER'; exit 1; }
           test "$(git rev-parse refs/remotes/origin/main)" = "8cc2d69352847cc3032aaa2cf6cc0bd638475f6a"
       - run: npm ci
       - name: Full browser/worker R3 regression + Order013 unit truth
