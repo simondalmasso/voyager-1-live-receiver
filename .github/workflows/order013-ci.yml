@@ -32,22 +32,32 @@ jobs:
           test "$(git rev-parse refs/remotes/origin/main)" = "8cc2d69352847cc3032aaa2cf6cc0bd638475f6a"
       - run: npm ci
       - name: Full browser/worker R3 regression + Order013 unit truth
-        run: npm test 2>&1 | tee order013-npm-test.log
+        run: |
+          set -euo pipefail
+          npm test 2>&1 | tee order013-npm-test.log
       - name: Listener R3 regression
         run: |
+          set -euo pipefail
           python -m pip install -e listener-agent
           PYTHONPATH=listener-agent/src python -m unittest discover -s listener-agent/tests -p 'test_*.py' 2>&1 | tee order013-listener-test.log
       - name: Build exact candidate
         env: {SOURCE_BUILD: '${{ github.sha }}'}
-        run: npm run build 2>&1 | tee order013-build.log
+        run: |
+          set -euo pipefail
+          npm run build 2>&1 | tee order013-build.log
       - name: Static payload measurement
         run: |
+          set -euo pipefail
           python - <<'PY' | tee order013-payload.json
           import json
           m=json.load(open('dist/build-manifest.json')); total=m['totals']['bytes']; hero=m['files']['assets/voyager-probe-b.glb']['bytes']; print(json.dumps({'totalBytes':total,'firstLoadHistoricalTargetBytes':6000000,'withinHistoricalTarget':total<6000000,'heroHighBytes':hero,'justification':'Three.js + DRACO decoders + two official NASA LODs + same-epoch geometry; high model selected only on capable viewports.'},indent=2))
           PY
       - name: Chromium visual gates
-        run: npx playwright install --with-deps chromium && npx playwright test tests/e2e/order013.spec.mjs --project=chromium 2>&1 | tee order013-e2e.log
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false @playwright/test@1.62.0 @axe-core/playwright@4.12.1
+          npx playwright install --with-deps chromium
+          npx playwright test tests/e2e/order013.spec.mjs --project=chromium 2>&1 | tee order013-e2e.log
       - name: Secret and license boundary
         run: |
           ! grep -RIE '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|sk-[A-Za-z0-9]{20,}|api[_-]?key[[:space:]]*[:=][[:space:]]*[A-Za-z0-9_-]{20,})' --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=dist .
