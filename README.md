@@ -93,3 +93,10 @@ No account, ads, analytics, fingerprinting, microphone, camera, automatic geoloc
 A real green `TELESCOPE_LIVE_VERIFIED` state requires an independently operated, registered receive-only station and fresh signed reduced products. DSN Now is opportunistic public status. NASA upstreams can degrade; degraded states remain labeled. Authentic raw IQ is not redistributed by default.
 
 Licensed MIT. See `THIRD_PARTY_NOTICES.md`, `data/sources.json`, `docs/PRODUCT_TRUTH.md`, `docs/SECURITY.md`, and `artifacts/science-evidence/`.
+
+
+## OS VOYAGER: public status, science archive and simulated operations
+
+The OS VOYAGER panel separates the NASA/JPL DSN Now public status feed, JPL Horizons derived geometry, the registered receive-only station pipeline, NASA's dated mission snapshot, and archived PDS PWS science. DSN Now is not spacecraft telemetry; archived PWS measurements are not live downlink data.
+
+Open OS VOYAGER from the navigation bar to inspect provenance and timestamps, run a local-only diagnostic rehearsal, or analyze a downloaded PDS measurement CSV in the browser. The CSV is not uploaded and fill values are not masked automatically. The simulated operations panel does not generate command frames or transmit RF. Real uplink remains disabled until an official NASA/JPL/operator interface and written authorization exist. See docs/OS_VOYAGER.md.

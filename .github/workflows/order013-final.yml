@@ -41,7 +41,9 @@ jobs:
           git merge-base --is-ancestor "$BASELINE_SHA" "$GITHUB_SHA"
           test "$(git rev-parse "$BASELINE_SHA^{tree}")" = "$BASELINE_TREE"
           test "$(git rev-parse refs/remotes/origin/main)" = "$MAIN_EXPECTED"
-          git diff --quiet "$BASELINE_SHA" "$GITHUB_SHA" -- worker listener-agent shared/contracts.js || { echo 'R3_SCIENCE_BACKEND_OR_CONTRACT_MUTATED'; exit 31; }
+          git diff --quiet "$BASELINE_SHA" "$GITHUB_SHA" -- listener-agent shared/contracts.js || { echo 'R3_LISTENER_OR_CONTRACT_MUTATED'; exit 31; }
+          unexpected="$(git diff --name-only "$BASELINE_SHA" "$GITHUB_SHA" -- worker | grep -Ev '^worker/dsn\.js$' || true)"
+          test -z "$unexpected" || { echo "$unexpected"; echo 'R3_BACKEND_MUTATION_OUTSIDE_DSNNOW_PARSER'; exit 31; }
           test "$USD_BUDGET" = 0 && test "$PAYMENT_DATA" = NO && test "$RF_TX" = NO && test "$MAIN_MERGE" = NO
           test -n "${CLOUDFLARE_API_TOKEN:-}" && test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
           mkdir -p artifacts/order013-final/{predeploy,production,security,performance}
@@ -126,6 +128,10 @@ jobs:
             sleep 2
           done
           test "$streak" -ge 3
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v1/dsn/voyager-1?o13=$RANDOM" -o artifacts/order013-final/production/dsn-now.json
+          jq -e '.schemaVersion==1 and .provenance.sourceId=="nasa-dsn-now-public-feed" and (.available|type=="boolean") and ((.available==true and .provenance.truthClass=="DSN_LIVE_PUBLIC_STATUS") or (.available==false and .provenance.truthClass=="UNAVAILABLE"))' artifacts/order013-final/production/dsn-now.json >/dev/null
+          curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/os-voyager.js?o13=$RANDOM" -o artifacts/order013-final/production/os-voyager.js
+          grep -q 'NO AUTHORIZED CHANNEL' artifacts/order013-final/production/os-voyager.js
           curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/api/v2/lab/evidence?o13=$RANDOM" -o artifacts/order013-final/production/evidence.json
           jq -e '.status=="NOT_READY" and (.missing|index("listenerEvidenceManifest"))!=null and (.manifest|not)' artifacts/order013-final/production/evidence.json >/dev/null
           curl --fail --silent --show-error -H 'Cache-Control: no-cache' "$PRODUCTION_URL/data/order013-ephemeris.json?o13=$RANDOM" -o artifacts/order013-final/production/ephemeris.json
@@ -168,13 +174,14 @@ jobs:
             if(audit.commonEpochFrame!==true)throw new Error('common epoch/frame false');
             const ui=await page.evaluate(()=>{const qs=['.o13-wordmark','.o13-truth','.o13-mode-status','.o13-nav'];let area=0;for(const q of qs){const r=document.querySelector(q)?.getBoundingClientRect();if(r)area+=r.width*r.height}return {ratio:area/(innerWidth*innerHeight),overflow:document.documentElement.scrollWidth>innerWidth||document.documentElement.scrollHeight>innerHeight,modes:[...document.querySelectorAll('[data-o13-mode]')].map(x=>x.dataset.o13Mode)} });
             if(ui.ratio>=.10||ui.overflow)throw new Error(`viewport contract ${width}x${height}: ${JSON.stringify(ui)}`);
-            if(JSON.stringify(ui.modes)!==JSON.stringify(['FLIGHT','SOLAR_SYSTEM','DISTANCE','LOOK_BACK_HOME','MISSION_TRAJECTORY','SIGNAL_LAB']))throw new Error('navigation contract');
+            if(JSON.stringify(ui.modes)!==JSON.stringify(['FLIGHT','SOLAR_SYSTEM','DISTANCE','LOOK_BACK_HOME','MISSION_TRAJECTORY','SIGNAL_LAB','OS_VOYAGER']))throw new Error('navigation contract');
             await page.getByRole('button',{name:'SOLAR SYSTEM'}).click();await page.waitForTimeout(300);const solar=await page.evaluate(()=>window.__order013.getAudit());if(solar.bodyCount!==10||solar.scaleMode!=='VOYAGER_DISTANCE_LOG')throw new Error('solar contract');
             await page.getByRole('button',{name:'DISTANCE'}).click();const distance=await page.locator('#o13-distance-values').innerText();if(!/Astronomical units/.test(distance)||!/Range rate/.test(distance))throw new Error('distance contract');
             await page.getByRole('button',{name:'LOOK BACK HOME'}).click();if(!/one-way light/i.test(await page.locator('#o13-lookback-copy').innerText()))throw new Error('look-back contract');
             await page.getByRole('button',{name:'MISSION TRAJECTORY'}).click();await page.waitForFunction(()=>window.__order013?.trajectoryAudit?.status==='READY',{timeout:15000});
             const trajectory=await page.evaluate(()=>window.__order013.trajectoryAudit);if(trajectory.truthClass!=='DERIVED_GEOMETRY'||trajectory.points<2)throw new Error('trajectory contract');
             await page.getByRole('button',{name:'SIGNAL LAB'}).click();if(!(await page.locator('#lab-drawer').isVisible()))throw new Error('signal lab disclosure');await page.keyboard.press('Escape');
+            await page.getByRole('button',{name:'OS VOYAGER'}).click();await page.waitForFunction(()=>{const p=document.querySelector('#os-voyager-panel');return p&&!p.hidden},{timeout:10000});await page.waitForFunction(()=>['DSN_LIVE_PUBLIC_STATUS','UNAVAILABLE'].includes(document.querySelector('#osv-dsn-truth')?.textContent),{timeout:10000});const ops=await page.evaluate(()=>({uplink:document.querySelector('#osv-uplink-state')?.textContent,dsn:document.querySelector('#osv-dsn-truth')?.textContent,readOnly:document.querySelector('#os-voyager-panel')?.textContent.includes('cannot send commands')}));if(!/DISABLED/.test(ops.uplink||'')||!ops.readOnly||!['DSN_LIVE_PUBLIC_STATUS','UNAVAILABLE'].includes(ops.dsn))throw new Error('OS Voyager truth boundary '+JSON.stringify(ops));await page.keyboard.press('Escape');
             const axe=await new AxeBuilder({page}).analyze();const serious=axe.violations.filter(v=>['serious','critical'].includes(v.impact));if(serious.length)throw new Error(`a11y ${width}x${height}: ${serious.map(v=>v.id).join(',')}`);
             audits.push({width,height,audit,ui,trajectory,a11yViolations:axe.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.length}))});
             await page.screenshot({path:`artifacts/order013-final/production/${width}x${height}.png`});
