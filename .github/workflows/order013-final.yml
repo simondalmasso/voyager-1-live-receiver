@@ -177,7 +177,7 @@ jobs:
             const audit=await page.evaluate(()=>window.__order013.getAudit());
             const expected=width<520?'/assets/voyager-probe-a.glb':'/assets/voyager-probe-b.glb';
             if(audit.productionModelActuallyLoaded!==expected||audit.fallbackUsed)throw new Error(`model ${width}x${height}: ${JSON.stringify(audit)}`);
-            if(audit.modelLoadMs>8000||audit.frameMsP95>33.4||audit.drawCalls>1000)throw new Error(`performance budget ${width}x${height}: ${JSON.stringify(audit)}`);
+            if(!Number.isFinite(audit.modelLoadMs)||audit.modelLoadMs<=0||audit.modelLoadMs>8000||audit.frameMsP95>33.4||audit.drawCalls>1000)throw new Error(`performance budget ${width}x${height}: ${JSON.stringify(audit)}`);
             if(audit.commonEpochFrame!==true)throw new Error('common epoch/frame false');
             const ui=await page.evaluate(()=>{const qs=['.o13-wordmark','.o13-truth','.o13-mode-status','.o13-nav'];let area=0;for(const q of qs){const r=document.querySelector(q)?.getBoundingClientRect();if(r)area+=r.width*r.height}return {ratio:area/(innerWidth*innerHeight),overflow:document.documentElement.scrollWidth>innerWidth||document.documentElement.scrollHeight>innerHeight,modes:[...document.querySelectorAll('[data-o13-mode]')].map(x=>x.dataset.o13Mode)} });
             if(ui.ratio>=.10||ui.overflow)throw new Error(`viewport contract ${width}x${height}: ${JSON.stringify(ui)}`);
