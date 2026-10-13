@@ -1,7 +1,40 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { ready } from './helpers.mjs';
 
-test('accepted #10 mission and signal functions remain behind disclosure',async({page})=>{await page.goto('/');await expect(page.locator('#freshness')).not.toHaveText(/Loading source state/i);await page.locator('#hud-menu').click();await expect(page.getByRole('heading',{name:/farthest human-made object/i})).toBeVisible();await page.getByRole('button',{name:/SIGNAL/}).click();await expect(page.locator('#mode-kicker')).toHaveText('RECEIVE-ONLY RADIO');await expect(page.locator('#signal-panel')).toBeVisible();await expect(page.locator('#signal-truth')).toHaveText('SYNTHETIC TEST');await expect(page.locator('#signal-disclaimer')).toContainText('not a live Voyager reception')});
-test('desktop keyboard modes and recenter remain operable',async({page},info)=>{test.skip(info.project.name!=='chromium','desktop keyboard');await page.goto('/');await expect(page.locator('#freshness')).not.toHaveText(/Loading source state/i);await page.keyboard.press('2');await page.locator('#hud-menu').click();await expect(page.getByRole('heading',{name:/human path beyond/i})).toBeVisible();await page.keyboard.press('r');const canvas=page.locator('#space-canvas');if(await canvas.isVisible())await expect(canvas).toHaveAttribute('data-fit-valid','true',{timeout:12000});else await expect(page.locator('#webgl-fallback')).toBeVisible()});
-test('invalid deep link remains sanitized',async({page})=>{await page.goto('/?mode=javascript:alert(1)');await expect(page.locator('#freshness')).not.toHaveText(/Loading source state/i);await page.locator('#hud-menu').click();await expect(page.getByRole('heading',{name:/farthest human-made object/i})).toBeVisible()});
-test('axe has no serious or critical violations',async({page})=>{await page.goto('/');await expect(page.locator('#freshness')).not.toHaveText(/Loading source state/i);const results=await new AxeBuilder({page}).analyze();expect(results.violations.filter(v=>['critical','serious'].includes(v.impact))).toEqual([])});
+test('mission trajectory and receive-only lab remain available through current navigation',async({page})=>{
+  await ready(page);
+  await expect(page.getByRole('button',{name:'MISSION TRAJECTORY'})).toBeVisible();
+  await page.getByRole('button',{name:'SIGNAL LAB'}).click();
+  await expect(page.locator('#lab-drawer')).toBeVisible();
+  await expect(page.locator('#o13-mode-status')).toContainText('SIGNAL LAB');
+  await expect(page.locator('#lab-capabilities')).toContainText(/WOLA 4-tap/);
+  await expect(page.locator('#lab-pipeline')).toContainText('SOURCE');
+  await expect(page.locator('#lab-drawer')).toContainText(/no TLE or rotator control/i);
+});
+
+test('desktop keyboard modes and recenter remain operable',async({page},info)=>{
+  test.skip(info.project.name!=='chromium','desktop keyboard');
+  await ready(page);
+  await page.keyboard.press('2');
+  await expect(page.locator('[data-o13-mode="SOLAR_SYSTEM"]')).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('#o13-solar-note')).toBeVisible();
+  await page.evaluate(()=>{window.__order013.scene.camera.position.x+=3});
+  await page.locator('#o13-recenter').click();
+  await expect.poll(()=>page.evaluate(()=>window.__order013.scene.camera.position.distanceTo(window.__order013.scene.targetPosition))).toBeLessThan(0.25);
+  await expect(page.locator('[data-o13-mode="SOLAR_SYSTEM"]')).toHaveAttribute('aria-pressed','true');
+});
+
+test('invalid deep link remains sanitized',async({page})=>{
+  let dialogCount=0;
+  page.on('dialog',dialog=>{dialogCount++;void dialog.dismiss()});
+  await ready(page,'/?mode=javascript:alert(1)');
+  await expect(page.locator('[data-o13-mode="FLIGHT"]')).toHaveAttribute('aria-pressed','true');
+  expect(dialogCount).toBe(0);
+});
+
+test('axe has no serious or critical violations',async({page})=>{
+  await ready(page);
+  const results=await new AxeBuilder({page}).analyze();
+  expect(results.violations.filter(v=>['critical','serious'].includes(v.impact))).toEqual([]);
+});
