@@ -1,6 +1,6 @@
 const URL='https://eyes.nasa.gov/dsn/data/dsn.xml';
 const clean=v=>String(v??'').replace(/[\r\n\t]+/g,' ').replace(/\s+/g,' ').trim().slice(0,180);
-function attr(attrs,name){const m=String(attrs||'').match(new RegExp('(?:^|\\s)'+name+'=["\\']([^"\\']*)["\\']','i'));return m?clean(m[1]):null}
+function attr(attrs,name){const re=new RegExp("(?:^|\\s)"+name+"\\s*=\\s*([\"'])(.*?)\\1","i");const m=String(attrs||"").match(re);return m?clean(m[2]):null}
 function elements(block,name){const re=new RegExp('<'+name+'\\b([^>]*?)(?:\\/\\s*>|>([\\s\\S]*?)<\\/'+name+'\\s*>)','gi');return [...String(block||'').matchAll(re)].map(m=>({attrs:m[1]||'',text:clean(m[2]||'')}))}
 function isVoyager1(value){return /^(?:voyager\s*1|voyager-?1|vgr\s*1)$/i.test(clean(value))}
 function active(value){return /^(?:true|1|yes|active)$/i.test(String(value||'').trim())}
